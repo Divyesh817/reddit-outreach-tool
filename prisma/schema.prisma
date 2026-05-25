@@ -1,0 +1,315 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Auth ────────────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Subscription
+  plan          Plan      @default(STARTER)
+  stripeCustomerId    String?   @unique
+  stripeSubscriptionId String?  @unique
+  planExpiresAt DateTime?
+
+  // Reddit OAuth
+  redditUsername      String?
+  redditAccessToken   String?
+  redditRefreshToken  String?
+  redditTokenExpiry   DateTime?
+  redditConnectedAt   DateTime?
+
+  // Backup Reddit account
+  redditBackupUsername     String?
+  redditBackupAccessToken  String?
+  redditBackupRefreshToken String?
+  redditBackupTokenExpiry  DateTime?
+
+  // Relations
+  accounts      Account[]
+  sessions      Session[]
+  products      Product[]
+  warmupSession WarmupSession?
+  accountHealth AccountHealth?
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ─── Product ─────────────────────────────────────────────────────────────────
+
+model Product {
+  id          String   @id @default(cuid())
+  userId      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Core
+  url         String
+  name        String
+  description String   @db.Text
+  targetAudience String @db.Text
+  keyBenefits String[] // array of benefit strings
+  competitors String[] // competitor names extracted from page
+  summary     String   @db.Text // AI-generated summary used for all prompts
+
+  // Status
+  isActive    Boolean  @default(true)
+  lastScrapedAt DateTime?
+
+  // Relations
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subreddits  Subreddit[]
+  opportunities Opportunity[]
+
+  @@map("products")
+}
+
+// ─── Subreddits ───────────────────────────────────────────────────────────────
+
+model Subreddit {
+  id          String   @id @default(cuid())
+  productId   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  name        String   // e.g. "SaaS" (without r/)
+  fitScore    Int      // 0–100, AI-assigned
+  fitReason   String?  @db.Text
+  memberCount Int?
+  postsPerDay Float?
+
+  // Safety
+  allowsPromotion Boolean @default(true)
+  isBlacklisted   Boolean @default(false)
+  blacklistReason String?
+  removalCount    Int     @default(0)
+  rulesScannedAt  DateTime?
+  rulesText       String? @db.Text
+
+  // Settings
+  isActive    Boolean  @default(true)
+  lastScannedAt DateTime?
+
+  // Relations
+  product     Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  opportunities Opportunity[]
+
+  @@unique([productId, name])
+  @@map("subreddits")
+}
+
+// ─── Opportunities ────────────────────────────────────────────────────────────
+
+model Opportunity {
+  id          String   @id @default(cuid())
+  productId   String
+  subredditId String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Reddit data
+  redditPostId    String   @unique
+  redditPostUrl   String
+  redditPostTitle String
+  redditPostBody  String?  @db.Text
+  redditAuthor    String
+  redditScore     Int      @default(0)
+  redditCommentCount Int   @default(0)
+  redditPostedAt  DateTime
+
+  // AI scoring
+  intentScore     Int      // 0–100
+  painType        PainType
+  shouldPitch     Boolean  @default(true)
+  scoringReasoning String? @db.Text
+
+  // Status
+  status          OpportunityStatus @default(QUEUED)
+  reviewedAt      DateTime?
+
+  // Relations
+  product         Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  subreddit       Subreddit    @relation(fields: [subredditId], references: [id], onDelete: Cascade)
+  replies         Reply[]
+  postedReply     PostedReply?
+
+  @@map("opportunities")
+}
+
+// ─── Replies ─────────────────────────────────────────────────────────────────
+
+model Reply {
+  id             String   @id @default(cuid())
+  opportunityId  String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Content
+  text           String   @db.Text
+  toneUsed       String?
+  whyThisWorks   String?  @db.Text
+
+  // Version tracking (user can regenerate)
+  version        Int      @default(1)
+  isActive       Boolean  @default(true) // only one active reply per opportunity
+
+  opportunity    Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@map("replies")
+}
+
+// ─── Posted Replies ───────────────────────────────────────────────────────────
+
+model PostedReply {
+  id             String   @id @default(cuid())
+  opportunityId  String   @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Reddit data
+  redditCommentId  String  @unique
+  redditCommentUrl String
+  postedAt         DateTime
+  postedAsUsername String
+
+  // Performance
+  upvotes          Int     @default(0)
+  isVisible        Boolean @default(true) // false = shadowbanned
+  isRemoved        Boolean @default(false)
+  removedAt        DateTime?
+  lastCheckedAt    DateTime?
+
+  opportunity    Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@map("posted_replies")
+}
+
+// ─── Safety & Warmup ─────────────────────────────────────────────────────────
+
+model WarmupSession {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  status      WarmupStatus @default(IN_PROGRESS)
+  startedAt   DateTime     @default(now())
+  completedAt DateTime?
+  targetDays  Int          @default(7)
+  daysCompleted Int        @default(0)
+  karmaEarned Int          @default(0)
+
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("warmup_sessions")
+}
+
+model AccountHealth {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  updatedAt   DateTime @updatedAt
+
+  // Reddit account stats
+  karma           Int      @default(0)
+  accountAgeDays  Int      @default(0)
+  isShadowbanned  Boolean  @default(false)
+  shadowbannedAt  DateTime?
+
+  // Posting stats (rolling 30 days)
+  promoRepliesPosted    Int @default(0)
+  normalRepliesPosted   Int @default(0)
+  repliesRemoved        Int @default(0)
+  removalRate           Float @default(0) // percentage
+
+  // Score 0–100
+  healthScore     Int      @default(100)
+  healthReason    String?
+
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("account_health")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Plan {
+  STARTER
+  GROWTH
+  AGENCY
+}
+
+enum PainType {
+  competitor_frustration
+  switching_intent
+  active_tool_search
+  roi_frustration
+  workflow_pain
+}
+
+enum OpportunityStatus {
+  QUEUED          // AI found it, waiting for user review
+  APPROVED        // user approved, waiting to post
+  POSTED          // successfully posted to Reddit
+  SKIPPED         // user skipped
+  NO_PITCH        // flagged as "don't pitch here"
+  FAILED          // posting failed (ban, removed, etc.)
+  EXPIRED         // thread too old to reply to (>48h)
+}
+
+enum WarmupStatus {
+  IN_PROGRESS
+  COMPLETED
+  PAUSED
+}
