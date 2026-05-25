@@ -3,26 +3,12 @@ import Snoowrap from 'snoowrap'
 import { SAFETY } from '@/types'
 import { prisma } from '@/lib/prisma'
 
-// ─── Client Factory ───────────────────────────────────────────────────────────
+const USER_AGENT = process.env.REDDIT_USER_AGENT || 'Redgrow/1.0.0 (by /u/redgrow_app)'
 
-export function getRedditClient(accessToken: string, refreshToken: string) {
-  return new Snoowrap({
-    userAgent: process.env.REDDIT_USER_AGENT!,
-    clientId: process.env.REDDIT_CLIENT_ID!,
-    clientSecret: process.env.REDDIT_CLIENT_SECRET!,
-    accessToken,
-    refreshToken,
-  })
-}
+// ─── Public (no-auth) Thread Fetching ────────────────────────────────────────
+// Uses Reddit's public JSON API — no account, no OAuth, zero ban risk.
 
-// ─── Subreddit Scanning ───────────────────────────────────────────────────────
-
-export async function fetchNewThreads(
-  subredditName: string,
-  accessToken: string,
-  refreshToken: string,
-  limit = 25
-): Promise<Array<{
+export interface RedditThread {
   id: string
   url: string
   title: string
@@ -32,33 +18,78 @@ export async function fetchNewThreads(
   num_comments: number
   created_utc: number
   comments: string[]
-}>> {
-  const reddit = getRedditClient(accessToken, refreshToken)
-  const subreddit = reddit.getSubreddit(subredditName)
-  const posts = await subreddit.getNew({ limit })
-
-  return Promise.all(posts.map(async (post) => {
-    // Fetch top 3 comments for context scoring
-    const comments: string[] = await (post.comments as any)
-      .fetchMore({ amount: 3 })
-      .then((c: any[]) => c.slice(0, 3).map((comment: any) => comment.body))
-      .catch(() => [])
-
-    return {
-      id: post.id,
-      url: `https://reddit.com${post.permalink}`,
-      title: post.title,
-      selftext: post.selftext || '',
-      author: post.author.name,
-      score: post.score,
-      num_comments: post.num_comments,
-      created_utc: post.created_utc,
-      comments,
-    }
-  }))
 }
 
-// ─── Posting ──────────────────────────────────────────────────────────────────
+export async function fetchNewThreads(
+  subredditName: string,
+  limit = 25
+): Promise<RedditThread[]> {
+  const res = await fetch(
+    `https://www.reddit.com/r/${subredditName}/new.json?limit=${limit}`,
+    {
+      headers: { 'User-Agent': USER_AGENT },
+      next: { revalidate: 0 },
+    }
+  )
+
+  if (!res.ok) {
+    if (res.status === 404) throw new Error(`r/${subredditName} not found`)
+    if (res.status === 403) throw new Error(`r/${subredditName} is private`)
+    throw new Error(`Reddit API error ${res.status}`)
+  }
+
+  const data = await res.json()
+  const posts: any[] = data?.data?.children?.map((c: any) => c.data) ?? []
+
+  // For each post, fetch top comments via public JSON
+  const threads = await Promise.all(
+    posts.slice(0, limit).map(async (post): Promise<RedditThread> => {
+      let comments: string[] = []
+      try {
+        const commentsRes = await fetch(
+          `https://www.reddit.com/r/${subredditName}/comments/${post.id}.json?limit=3&depth=1`,
+          { headers: { 'User-Agent': USER_AGENT }, next: { revalidate: 0 } }
+        )
+        if (commentsRes.ok) {
+          const cd = await commentsRes.json()
+          const listing = cd?.[1]?.data?.children ?? []
+          comments = listing
+            .filter((c: any) => c.kind === 't1' && c.data?.body)
+            .slice(0, 3)
+            .map((c: any) => c.data.body as string)
+        }
+      } catch { /* non-fatal */ }
+
+      return {
+        id: post.id,
+        url: `https://reddit.com${post.permalink}`,
+        title: post.title,
+        selftext: post.selftext || '',
+        author: post.author || '[deleted]',
+        score: post.score ?? 0,
+        num_comments: post.num_comments ?? 0,
+        created_utc: post.created_utc,
+        comments,
+      }
+    })
+  )
+
+  return threads
+}
+
+// ─── Client Factory (for posting — requires user OAuth) ───────────────────────
+
+export function getRedditClient(accessToken: string, refreshToken: string) {
+  return new Snoowrap({
+    userAgent: USER_AGENT,
+    clientId: process.env.REDDIT_CLIENT_ID!,
+    clientSecret: process.env.REDDIT_CLIENT_SECRET!,
+    accessToken,
+    refreshToken,
+  })
+}
+
+// ─── Posting (future use — requires user Reddit OAuth) ────────────────────────
 
 export async function postReply(
   postId: string,

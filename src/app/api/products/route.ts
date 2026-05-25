@@ -1,8 +1,8 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { createClient } from '@/lib/supabase/server'
+
 import { prisma } from '@/lib/prisma'
 import { scrapeProductProfile, discoverSubreddits } from '@/lib/anthropic'
 import { fetchSubredditRules } from '@/lib/reddit'
@@ -15,9 +15,10 @@ const CreateProductSchema = z.object({
 })
 
 export async function GET() {
-  const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const userId = (session.user as any).id
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const userId = (user as any).id
 
   const products = await prisma.product.findMany({
     where: { userId, isActive: true },
@@ -32,18 +33,19 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const userId = (session.user as any).id
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const userId = (user as any).id
 
   const body = await req.json().catch(() => null)
   const parsed = CreateProductSchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: 'Invalid input' }, { status: 400 })
 
   // Enforce plan product limit
-  const user = await prisma.user.findUnique({ where: { id: userId } })
+  const dbUser = await prisma.user.findUnique({ where: { id: userId } })
   const productCount = await prisma.product.count({ where: { userId, isActive: true } })
-  const limit = PLAN_LIMITS[user!.plan].products
+  const limit = PLAN_LIMITS[dbUser?.plan ?? 'STARTER'].products
   if (productCount >= limit) {
     return NextResponse.json({ error: `Your plan allows max ${limit} product(s). Upgrade to add more.` }, { status: 403 })
   }

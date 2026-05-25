@@ -1,8 +1,8 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { createClient } from '@/lib/supabase/server'
+
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 
@@ -10,9 +10,10 @@ const AddSchema = z.object({ name: z.string().min(1) })
 const ToggleSchema = z.object({ subredditId: z.string(), isActive: z.boolean() })
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const userId = (session.user as any).id
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const userId = (user as any).id
 
   const product = await prisma.product.findFirst({ where: { id: params.id, userId } })
   if (!product) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -31,9 +32,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const userId = (session.user as any).id
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const userId = (user as any).id
 
   const product = await prisma.product.findFirst({ where: { id: params.id, userId } })
   if (!product) return NextResponse.json({ error: 'Not found' }, { status: 404 })

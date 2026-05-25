@@ -1,19 +1,26 @@
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import Link from 'next/link'
-import { SidebarNav } from '@/components/dashboard/SidebarNav'
+import { prisma } from '@/lib/prisma'
+import { DashboardShell } from '@/components/dashboard/DashboardShell'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const session = await getServerSession(authOptions)
-  if (!session) redirect('/login')
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  const [dbUser, products, opportunityCount] = await Promise.all([
+    prisma.user.findUnique({ where: { id: user.id }, select: { name: true, email: true, avatarUrl: true, plan: true } }),
+    prisma.product.findMany({ where: { userId: user.id, isActive: true }, select: { id: true, name: true, url: true }, orderBy: { createdAt: 'asc' } }),
+    prisma.opportunity.count({ where: { product: { userId: user.id }, status: 'QUEUED' } }),
+  ])
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      <SidebarNav user={session.user} />
-      <main className="flex-1 min-w-0 p-8">
-        {children}
-      </main>
-    </div>
+    <DashboardShell
+      user={{ name: dbUser?.name ?? user.email ?? '', email: dbUser?.email ?? user.email ?? '', avatarUrl: dbUser?.avatarUrl ?? null, plan: dbUser?.plan ?? 'STARTER' }}
+      products={products}
+      opportunityCount={opportunityCount}
+    >
+      {children}
+    </DashboardShell>
   )
 }

@@ -1,16 +1,17 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { createClient } from '@/lib/supabase/server'
+
 import { prisma } from '@/lib/prisma'
 import { discoverSubreddits } from '@/lib/anthropic'
 import { fetchSubredditRules } from '@/lib/reddit'
 
 export async function POST(_req: NextRequest, { params }: { params: { id: string } }) {
-  const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const userId = (session.user as any).id
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const userId = (user as any).id
 
   const product = await prisma.product.findFirst({ where: { id: params.id, userId } })
   if (!product) return NextResponse.json({ error: 'Not found' }, { status: 404 })

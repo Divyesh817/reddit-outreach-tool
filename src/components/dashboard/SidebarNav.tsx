@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { signOut } from 'next-auth/react'
+import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 
 const nav = [
@@ -14,6 +14,12 @@ const nav = [
 
 export function SidebarNav({ user }: { user: any }) {
   const pathname = usePathname()
+  const supabase = createClient()
+
+  async function handleSignOut() {
+    await supabase.auth.signOut()
+    window.location.href = '/login'
+  }
 
   return (
     <aside className="w-60 shrink-0 bg-white border-r border-gray-200 flex flex-col min-h-screen">
@@ -57,7 +63,7 @@ export function SidebarNav({ user }: { user: any }) {
           </div>
         </div>
         <button
-          onClick={() => signOut({ callbackUrl: '/login' })}
+          onClick={handleSignOut}
           className="w-full mt-1 flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
         >
           <LogoutIcon className="w-4 h-4" />

@@ -1,158 +1,209 @@
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { createClient } from '@/lib/supabase/server'
 import { prisma } from '@/lib/prisma'
-import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import { S } from '@/lib/theme'
+
 
 async function getStats(userId: string) {
-  const [opportunities, posted, products, accountHealth] = await Promise.all([
+  const [queued, posted, accountHealth, products] = await Promise.all([
     prisma.opportunity.count({ where: { product: { userId }, status: 'QUEUED' } }),
     prisma.postedReply.count({ where: { opportunity: { product: { userId } } } }),
-    prisma.product.count({ where: { userId, isActive: true } }),
     prisma.accountHealth.findUnique({ where: { userId } }),
+    prisma.product.findMany({
+      where: { userId, isActive: true },
+      select: { id: true, name: true },
+      take: 1,
+    }),
   ])
-  return { opportunities, posted, products, accountHealth }
-}
-
-async function getRecentActivity(userId: string) {
-  return prisma.opportunity.findMany({
-    where: { product: { userId } },
-    orderBy: { createdAt: 'desc' },
-    take: 5,
-    include: { subreddit: true },
-  })
+  return { queued, posted, accountHealth, product: products[0] ?? null }
 }
 
 export default async function DashboardPage() {
-  const session = await getServerSession(authOptions)
-  const userId = (session!.user as any).id
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
-  const [stats, activity] = await Promise.all([
-    getStats(userId),
-    getRecentActivity(userId),
-  ])
+  const userId = user.id
+  const firstName = user.user_metadata?.full_name?.split(' ')[0] ?? user.email?.split('@')[0] ?? 'there'
+  const { queued, posted, accountHealth, product } = await getStats(userId)
 
-  const user = await prisma.user.findUnique({ where: { id: userId } })
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">
-          Good morning, {session!.user?.name?.split(' ')[0]} 👋
+    <div style={{ padding: '32px 40px', maxWidth: 900 }}>
+
+      {/* Header */}
+      <div style={{ marginBottom: 28 }}>
+        <h1 style={{ fontSize: 25, fontWeight: 700, color: S.text, margin: 0, letterSpacing: '-.02em' }}>
+          {greeting}, {firstName}
         </h1>
-        <p className="text-gray-500 mt-1">Here's what's happening with your outreach today.</p>
+        <p style={{ fontSize: 16, color: S.text3, marginTop: 4 }}>
+          {product ? `Monitoring opportunities for ${product.name}` : 'Set up your first product to start scanning.'}
+        </p>
       </div>
 
-      {/* Reddit not connected banner */}
-      {!user?.redditUsername && (
-        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 flex items-center justify-between">
-          <div>
-            <p className="font-medium text-orange-900">Connect your Reddit account to start posting</p>
-            <p className="text-sm text-orange-700 mt-0.5">Required to scan subreddits and post approved replies.</p>
-          </div>
-          <Link href="/settings">
-            <Button size="sm">Connect Reddit</Button>
-          </Link>
-        </div>
-      )}
-
-      {/* Stats */}
-      <div className="grid grid-cols-4 gap-4">
+      {/* Stats strip */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1,
+        background: S.line, borderRadius: 14, overflow: 'hidden', marginBottom: 28,
+        border: `1px solid ${S.line2}`,
+      }}>
         {[
-          { label: 'Queued opportunities', value: stats.opportunities, color: 'text-purple-600', bg: 'bg-purple-50' },
-          { label: 'Replies posted', value: stats.posted, color: 'text-green-600', bg: 'bg-green-50' },
-          { label: 'Active products', value: stats.products, color: 'text-blue-600', bg: 'bg-blue-50' },
+          {
+            label: 'Opportunities waiting',
+            value: queued,
+            sub: 'Ready to review',
+            color: S.orange,
+            soft: S.orangeSoft,
+            href: '/opportunities',
+          },
+          {
+            label: 'Replies posted',
+            value: posted,
+            sub: 'All time',
+            color: S.green,
+            soft: S.greenSoft,
+            href: null,
+          },
           {
             label: 'Account health',
-            value: stats.accountHealth ? `${stats.accountHealth.healthScore}%` : '—',
-            color: stats.accountHealth?.isShadowbanned ? 'text-red-600' : 'text-green-600',
-            bg: stats.accountHealth?.isShadowbanned ? 'bg-red-50' : 'bg-green-50',
+            value: accountHealth ? `${accountHealth.healthScore}` : '—',
+            sub: accountHealth?.isShadowbanned ? 'Shadowbanned — act now' : accountHealth ? 'Healthy' : 'Connect Reddit',
+            color: accountHealth?.isShadowbanned ? S.red : S.blue,
+            soft: accountHealth?.isShadowbanned ? S.redSoft : S.blueSoft,
+            href: '/settings',
           },
         ].map(stat => (
-          <Card key={stat.label}>
-            <CardContent className="pt-5">
-              <p className="text-sm text-gray-500">{stat.label}</p>
-              <p className={`text-3xl font-bold mt-1 ${stat.color}`}>{stat.value}</p>
-            </CardContent>
-          </Card>
+          <StatCard key={stat.label} {...stat} />
         ))}
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
-        {/* Quick actions */}
-        <Card>
-          <div className="px-6 py-4 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-900">Quick actions</h2>
-          </div>
-          <CardContent className="space-y-2 pt-4">
-            <Link href="/opportunities" className="block">
-              <Button variant="secondary" className="w-full justify-start">
-                Review opportunity queue
-                {stats.opportunities > 0 && (
-                  <Badge variant="purple" className="ml-auto">{stats.opportunities}</Badge>
-                )}
-              </Button>
-            </Link>
-            <Link href="/products/new" className="block">
-              <Button variant="secondary" className="w-full justify-start">
-                Add a new product
-              </Button>
-            </Link>
-            <Link href="/settings" className="block">
-              <Button variant="secondary" className="w-full justify-start">
-                {user?.redditUsername ? `Reddit: @${user.redditUsername}` : 'Connect Reddit account'}
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-
-        {/* Recent activity */}
-        <Card className="col-span-2">
-          <div className="px-6 py-4 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-900">Recent activity</h2>
-          </div>
-          <CardContent className="pt-4">
-            {activity.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-gray-400 text-sm">No activity yet.</p>
-                <Link href="/products/new" className="mt-3 inline-block">
-                  <Button size="sm">Add your first product</Button>
-                </Link>
+      {/* Quick actions */}
+      <div style={{ background: S.panel, borderRadius: 14, border: `1px solid ${S.line2}`, overflow: 'hidden', marginBottom: 20 }}>
+        <div style={{ padding: '14px 20px', borderBottom: `1px solid ${S.line}` }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: S.text3, textTransform: 'uppercase', letterSpacing: '.06em', fontFamily: 'JetBrains Mono, monospace' }}>
+            Quick actions
+          </span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)' }}>
+          {[
+            {
+              label: 'Review inbox',
+              desc: `${queued} opportunities waiting`,
+              href: '/opportunities',
+              icon: (
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <rect x="2" y="4" width="16" height="13" rx="2.5" stroke={S.orange} strokeWidth="1.4"/>
+                  <path d="M2 7l8 5 8-5" stroke={S.orange} strokeWidth="1.4" strokeLinejoin="round"/>
+                </svg>
+              ),
+              primary: true,
+            },
+            {
+              label: 'Manage products',
+              desc: 'Edit product profiles',
+              href: '/products',
+              icon: (
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <rect x="3" y="3" width="14" height="14" rx="2.5" stroke={S.text3} strokeWidth="1.4"/>
+                  <path d="M7 10h6M10 7v6" stroke={S.text3} strokeWidth="1.4" strokeLinecap="round"/>
+                </svg>
+              ),
+              primary: false,
+            },
+            {
+              label: 'Settings',
+              desc: 'Account & Reddit connection',
+              href: '/settings',
+              icon: (
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <circle cx="10" cy="10" r="3" stroke={S.text3} strokeWidth="1.4"/>
+                  <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.22 4.22l1.41 1.41M14.37 14.37l1.41 1.41M4.22 15.78l1.41-1.41M14.37 5.63l1.41-1.41" stroke={S.text3} strokeWidth="1.4" strokeLinecap="round"/>
+                </svg>
+              ),
+              primary: false,
+            },
+          ].map((action, i) => (
+            <Link
+              key={action.label}
+              href={action.href}
+              style={{
+                display: 'block', padding: '18px 20px', textDecoration: 'none',
+                borderRight: i < 2 ? `1px solid ${S.line}` : 'none',
+              }}
+            >
+              <div style={{
+                width: 36, height: 36, borderRadius: 9,
+                background: action.primary ? S.orangeSoft : S.panel2,
+                border: `1px solid ${action.primary ? S.orangeLine : S.line}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                marginBottom: 10,
+              }}>
+                {action.icon}
               </div>
-            ) : (
-              <ul className="space-y-3">
-                {activity.map(opp => (
-                  <li key={opp.id} className="flex items-start gap-3">
-                    <div className="mt-0.5">
-                      <StatusDot status={opp.status} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-900 truncate">{opp.redditPostTitle}</p>
-                      <p className="text-xs text-gray-500">r/{opp.subreddit.name} · score {opp.intentScore}</p>
-                    </div>
-                    <Badge variant={opp.status === 'QUEUED' ? 'yellow' : opp.status === 'POSTED' ? 'green' : 'default'}>
-                      {opp.status.toLowerCase()}
-                    </Badge>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+              <div style={{ fontSize: 16, fontWeight: 700, color: S.text, marginBottom: 2 }}>{action.label}</div>
+              <div style={{ fontSize: 15, color: S.text3 }}>{action.desc}</div>
+            </Link>
+          ))}
+        </div>
       </div>
+
+      {/* No product nudge */}
+      {!product && (
+        <div style={{
+          background: S.panel, borderRadius: 14, border: `1px solid ${S.orangeLine}`,
+          padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 16,
+        }}>
+          <div style={{
+            width: 40, height: 40, borderRadius: 10, background: S.orangeSoft,
+            border: `1px solid ${S.orangeLine}`, display: 'flex', alignItems: 'center',
+            justifyContent: 'center', flexShrink: 0,
+          }}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <path d="M9 4v5l3 3" stroke={S.orange} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <circle cx="9" cy="9" r="7" stroke={S.orange} strokeWidth="1.5"/>
+            </svg>
+          </div>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: 16, fontWeight: 700, color: S.text, margin: '0 0 2px' }}>
+              Add your first product to start
+            </p>
+            <p style={{ fontSize: 15, color: S.text3, margin: 0 }}>
+              Redgrow will scan Reddit 24/7 and surface high-intent threads for you.
+            </p>
+          </div>
+          <Link
+            href="/onboarding"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '8px 16px', borderRadius: 8, fontSize: 16, fontWeight: 600,
+              background: S.orange, color: '#fff', textDecoration: 'none', flexShrink: 0,
+            }}
+          >
+            Get started →
+          </Link>
+        </div>
+      )}
     </div>
   )
 }
 
-function StatusDot({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    QUEUED: 'bg-yellow-400',
-    APPROVED: 'bg-blue-400',
-    POSTED: 'bg-green-400',
-    SKIPPED: 'bg-gray-300',
-    FAILED: 'bg-red-400',
-  }
-  return <div className={`w-2 h-2 rounded-full mt-1.5 ${colors[status] ?? 'bg-gray-300'}`} />
+function StatCard({ label, value, sub, color, soft, href }: {
+  label: string; value: number | string; sub: string; color: string; soft: string; href: string | null
+}) {
+  const inner = (
+    <div style={{ background: S.panel, padding: '20px 24px', cursor: href ? 'pointer' : 'default' }}>
+      <p style={{ fontSize: 13, fontWeight: 700, color: S.text3, margin: 0, textTransform: 'uppercase', letterSpacing: '.06em', fontFamily: 'JetBrains Mono, monospace' }}>
+        {label}
+      </p>
+      <p style={{ fontSize: 37, fontWeight: 700, color, margin: '8px 0 4px', letterSpacing: '-.04em', lineHeight: 1 }}>
+        {value}
+      </p>
+      <p style={{ fontSize: 15, color: S.text3, margin: 0 }}>{sub}</p>
+    </div>
+  )
+  if (href) return <Link href={href} style={{ textDecoration: 'none', display: 'block' }}>{inner}</Link>
+  return inner
 }

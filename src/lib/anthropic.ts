@@ -12,12 +12,11 @@ export async function scrapeProductProfile(url: string, html: string): Promise<P
     max_tokens: 1000,
     messages: [{
       role: 'user',
-      content: `You are analysing a SaaS product landing page. Extract a structured product profile.
+      content: `You are analysing a SaaS product. Extract a structured product profile.
 
 URL: ${url}
 
-PAGE HTML (truncated):
-${html.slice(0, 8000)}
+${html.trim() ? `PAGE HTML (truncated):\n${html.slice(0, 8000)}` : `(Page HTML unavailable — infer product details from the URL and domain name.)`}
 
 Return ONLY valid JSON, no markdown, no explanation:
 {
@@ -27,7 +26,9 @@ Return ONLY valid JSON, no markdown, no explanation:
   "keyBenefits": ["benefit 1", "benefit 2", "benefit 3"],
   "competitors": ["competitor names mentioned on page or implied"],
   "summary": "3-4 sentence summary optimised for Reddit reply generation — include audience, pain solved, key differentiator"
-}`
+}
+
+If HTML is unavailable, make your best inference from the URL and domain name. Always return a complete JSON object.`
     }]
   })
 
@@ -178,6 +179,35 @@ Return ONLY valid JSON, no markdown:
 
   const text = response.content[0].type === 'text' ? response.content[0].text : ''
   return JSON.parse(text) as ReplyResult
+}
+
+// ─── Keyword Suggestions ─────────────────────────────────────────────────────
+
+export async function generateKeywordSuggestions(product: ProductProfile): Promise<string[]> {
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 400,
+    messages: [{
+      role: 'user',
+      content: `You are a Reddit marketing expert. Generate buying-intent keyword phrases that people type on Reddit when they are actively looking for a solution like this product.
+
+PRODUCT: ${product.name}
+AUDIENCE: ${product.targetAudience}
+COMPETITORS: ${product.competitors.join(', ') || 'none mentioned'}
+PROBLEM SOLVED: ${product.description}
+
+Return ONLY valid JSON array of 10–14 short phrases (2–5 words each), no markdown:
+["phrase one", "phrase two", ...]
+
+Rules:
+- Phrases should match real Reddit language — casual, not corporate
+- Mix switching intent ("alternative to", "switching from"), tool search ("best tool for", "anyone using"), frustration ("tired of", "sick of")
+- Include competitor-specific phrases if competitors are named
+- No single words, no generic jargon`
+    }]
+  })
+  const text = response.content[0].type === 'text' ? response.content[0].text : '[]'
+  try { return JSON.parse(text) } catch { return [] }
 }
 
 // ─── Warmup Comment Generation ────────────────────────────────────────────────

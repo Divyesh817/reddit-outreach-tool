@@ -2,13 +2,10 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { S } from '@/lib/theme'
 
-type Step = 'url' | 'review' | 'subreddits'
+
+type Step = 'url' | 'review'
 
 interface Profile {
   name: string
@@ -17,6 +14,29 @@ interface Profile {
   keyBenefits: string[]
   competitors: string[]
   summary: string
+}
+
+function Label({ children }: { children: React.ReactNode }) {
+  return (
+    <label style={{
+      display: 'block', fontSize: 14, fontWeight: 700, color: S.text4,
+      textTransform: 'uppercase', letterSpacing: '.06em',
+      fontFamily: 'JetBrains Mono, monospace', marginBottom: 6,
+    }}>
+      {children}
+    </label>
+  )
+}
+
+function Chip({ children }: { children: React.ReactNode }) {
+  return (
+    <span style={{
+      fontSize: 14, fontWeight: 600, padding: '3px 9px', borderRadius: 6,
+      background: S.orangeSoft, border: `1px solid ${S.orangeLine}`, color: S.orange2,
+    }}>
+      {children}
+    </span>
+  )
 }
 
 export default function NewProductPage() {
@@ -32,44 +52,29 @@ export default function NewProductPage() {
     if (!url.trim()) return
     setLoading(true)
     setError('')
-
     try {
-      // Fetch page HTML via server-side proxy
       const proxyRes = await fetch('/api/products/fetch-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url }),
       })
-
       if (!proxyRes.ok) {
         const err = await proxyRes.json()
         throw new Error(err.error || 'Failed to fetch URL')
       }
-
       const { html } = await proxyRes.json()
-
-      // Create product (scrape + discover subreddits)
       const res = await fetch('/api/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url, html }),
       })
-
       if (!res.ok) {
         const err = await res.json()
         throw new Error(err.error || 'Failed to create product')
       }
-
       const { data } = await res.json()
       setProductId(data.id)
-      setProfile({
-        name: data.name,
-        description: data.description,
-        targetAudience: data.targetAudience,
-        keyBenefits: data.keyBenefits,
-        competitors: data.competitors,
-        summary: data.summary,
-      })
+      setProfile({ name: data.name, description: data.description, targetAudience: data.targetAudience, keyBenefits: data.keyBenefits, competitors: data.competitors, summary: data.summary })
       setStep('review')
     } catch (e: any) {
       setError(e.message)
@@ -82,7 +87,6 @@ export default function NewProductPage() {
     if (!productId || !profile) return
     setLoading(true)
     setError('')
-
     try {
       const res = await fetch(`/api/products/${productId}`, {
         method: 'PATCH',
@@ -98,106 +102,168 @@ export default function NewProductPage() {
     }
   }
 
+  const inputStyle = {
+    width: '100%', padding: '10px 14px', borderRadius: 8, fontSize: 16,
+    background: S.card, border: `1px solid ${S.line2}`, color: S.text,
+    outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const,
+  }
+
   return (
-    <div className="max-w-2xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Add a product</h1>
-        <p className="text-gray-500 mt-1">Paste your product URL and we'll extract everything automatically.</p>
+    <div style={{ padding: '32px 40px', maxWidth: 640 }}>
+      <div style={{ marginBottom: 28 }}>
+        <h1 style={{ fontSize: 23, fontWeight: 700, color: S.text, margin: 0, letterSpacing: '-.02em' }}>
+          Add a product
+        </h1>
+        <p style={{ fontSize: 16, color: S.text3, margin: '4px 0 0' }}>
+          Paste your product URL and we'll extract everything automatically.
+        </p>
       </div>
 
       {/* Stepper */}
-      <div className="flex items-center gap-2">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
         {(['url', 'review'] as Step[]).map((s, i) => (
-          <div key={s} className="flex items-center gap-2">
-            <div className={`flex items-center justify-center w-7 h-7 rounded-full text-sm font-medium ${
-              step === s ? 'bg-purple-600 text-white' :
-              (step === 'review' && s === 'url') ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-400'
-            }`}>
+          <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{
+              width: 26, height: 26, borderRadius: '50%', display: 'flex',
+              alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700,
+              background: step === s ? S.orange : (step === 'review' && s === 'url') ? S.green : S.panel2,
+              color: (step === s || (step === 'review' && s === 'url')) ? '#fff' : S.text4,
+              border: `1px solid ${step === s ? S.orangeLine : S.line2}`,
+            }}>
               {(step === 'review' && s === 'url') ? '✓' : i + 1}
             </div>
-            <span className={`text-sm ${step === s ? 'text-gray-900 font-medium' : 'text-gray-400'}`}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: step === s ? S.text : S.text4 }}>
               {s === 'url' ? 'Enter URL' : 'Review & save'}
             </span>
-            {i < 1 && <div className="w-8 h-px bg-gray-200 mx-1" />}
+            {i < 1 && <div style={{ width: 24, height: 1, background: S.line2, margin: '0 4px' }} />}
           </div>
         ))}
       </div>
 
       {step === 'url' && (
-        <Card>
-          <CardContent className="pt-6 space-y-4">
-            <Input
-              label="Product URL"
-              type="url"
-              placeholder="https://yourproduct.com"
-              value={url}
-              onChange={e => setUrl(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleScrape()}
-            />
-            {error && <p className="text-sm text-red-600">{error}</p>}
-            <Button onClick={handleScrape} loading={loading} disabled={!url.trim()}>
-              {loading ? 'Analysing your product…' : 'Analyse product'}
-            </Button>
-          </CardContent>
-        </Card>
+        <div style={{ background: S.panel, borderRadius: 14, border: `1px solid ${S.line2}`, padding: '24px' }}>
+          <Label>Product URL</Label>
+          <input
+            type="url"
+            placeholder="https://yourproduct.com"
+            value={url}
+            onChange={e => setUrl(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleScrape()}
+            style={{ ...inputStyle, marginBottom: 16 }}
+          />
+          {error && (
+            <div style={{ background: S.redSoft, border: `1px solid rgba(229,83,83,.3)`, borderRadius: 8, padding: '10px 14px', fontSize: 15, color: S.red, marginBottom: 14 }}>
+              {error}
+            </div>
+          )}
+          <button
+            onClick={handleScrape}
+            disabled={loading || !url.trim()}
+            style={{
+              padding: '10px 22px', background: (loading || !url.trim()) ? S.panel2 : S.orange,
+              color: (loading || !url.trim()) ? S.text4 : '#fff', border: 'none',
+              borderRadius: 8, fontSize: 16, fontWeight: 700,
+              cursor: (loading || !url.trim()) ? 'not-allowed' : 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            {loading ? 'Analysing your product…' : 'Analyse product'}
+          </button>
+        </div>
       )}
 
       {step === 'review' && profile && (
-        <Card>
-          <CardHeader>
-            <h2 className="font-semibold text-gray-900">Review extracted profile</h2>
-            <p className="text-sm text-gray-500">Edit anything that looks off before saving.</p>
-          </CardHeader>
-          <CardContent className="space-y-4 pt-4">
-            <Input
-              label="Product name"
-              value={profile.name}
-              onChange={e => setProfile(p => p ? { ...p, name: e.target.value } : p)}
-            />
-            <Textarea
-              label="Description"
+        <div style={{ background: S.panel, borderRadius: 14, border: `1px solid ${S.line2}`, padding: '24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <p style={{ fontSize: 17, fontWeight: 700, color: S.text, margin: '0 0 2px' }}>Review extracted profile</p>
+            <p style={{ fontSize: 15, color: S.text3, margin: 0 }}>Edit anything that looks off before saving.</p>
+          </div>
+
+          <div>
+            <Label>Product name</Label>
+            <input value={profile.name} onChange={e => setProfile(p => p ? { ...p, name: e.target.value } : p)} style={inputStyle} />
+          </div>
+
+          <div>
+            <Label>Description</Label>
+            <textarea
               rows={3}
               value={profile.description}
               onChange={e => setProfile(p => p ? { ...p, description: e.target.value } : p)}
+              style={{ ...inputStyle, resize: 'vertical' }}
             />
-            <Textarea
-              label="Target audience"
+          </div>
+
+          <div>
+            <Label>Target audience</Label>
+            <textarea
               rows={2}
               value={profile.targetAudience}
               onChange={e => setProfile(p => p ? { ...p, targetAudience: e.target.value } : p)}
+              style={{ ...inputStyle, resize: 'vertical' }}
             />
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Key benefits</label>
-              <div className="flex flex-wrap gap-2">
-                {profile.keyBenefits.map((b, i) => (
-                  <Badge key={i} variant="purple">{b}</Badge>
-                ))}
-              </div>
+          </div>
+
+          <div>
+            <Label>Key benefits</Label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {profile.keyBenefits.map((b, i) => <Chip key={i}>{b}</Chip>)}
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Competitors detected</label>
-              <div className="flex flex-wrap gap-2">
-                {profile.competitors.length > 0
-                  ? profile.competitors.map((c, i) => <Badge key={i}>{c}</Badge>)
-                  : <span className="text-sm text-gray-400">None detected</span>
-                }
-              </div>
+          </div>
+
+          <div>
+            <Label>Competitors detected</Label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {profile.competitors.length > 0
+                ? profile.competitors.map((c, i) => (
+                  <span key={i} style={{ fontSize: 14, fontWeight: 600, padding: '3px 9px', borderRadius: 6, background: S.panel2, border: `1px solid ${S.line2}`, color: S.text3 }}>{c}</span>
+                ))
+                : <span style={{ fontSize: 15, color: S.text4 }}>None detected</span>
+              }
             </div>
-            <Textarea
-              label="AI summary (used for all reply generation)"
+          </div>
+
+          <div>
+            <Label>AI summary (used for all reply generation)</Label>
+            <textarea
               rows={4}
               value={profile.summary}
               onChange={e => setProfile(p => p ? { ...p, summary: e.target.value } : p)}
+              style={{ ...inputStyle, resize: 'vertical' }}
             />
-            {error && <p className="text-sm text-red-600">{error}</p>}
-            <div className="flex gap-3 pt-2">
-              <Button onClick={handleSaveProfile} loading={loading}>
-                Save and view subreddits
-              </Button>
-              <Button variant="ghost" onClick={() => setStep('url')}>Back</Button>
+          </div>
+
+          {error && (
+            <div style={{ background: S.redSoft, border: `1px solid rgba(229,83,83,.3)`, borderRadius: 8, padding: '10px 14px', fontSize: 15, color: S.red }}>
+              {error}
             </div>
-          </CardContent>
-        </Card>
+          )}
+
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              onClick={handleSaveProfile}
+              disabled={loading}
+              style={{
+                padding: '10px 22px', background: loading ? S.panel2 : S.orange,
+                color: loading ? S.text4 : '#fff', border: 'none', borderRadius: 8,
+                fontSize: 16, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              {loading ? 'Saving…' : 'Save and view subreddits'}
+            </button>
+            <button
+              onClick={() => setStep('url')}
+              style={{
+                padding: '10px 16px', background: 'transparent', border: `1px solid ${S.line2}`,
+                borderRadius: 8, fontSize: 16, fontWeight: 600, color: S.text3,
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              Back
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )

@@ -1,66 +1,57 @@
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { createClient } from '@/lib/supabase/server'
 import { prisma } from '@/lib/prisma'
-import { OpportunityQueue } from '@/components/opportunities/OpportunityQueue'
-import { PAIN_TYPE_LABELS } from '@/types'
+import { redirect } from 'next/navigation'
+import { InboxView } from '@/components/opportunities/InboxView'
 
 export default async function OpportunitiesPage({
   searchParams,
 }: {
-  searchParams: { painType?: string; page?: string }
+  searchParams: { status?: string; page?: string }
 }) {
-  const session = await getServerSession(authOptions)
-  const userId = (session!.user as any).id
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
-  const page = parseInt(searchParams.page || '1')
-  const painType = searchParams.painType || undefined
-  const take = 20
+  const userId = user.id
+  const status = searchParams.status || 'QUEUED'
+  const take = 50
+
+  const product = await prisma.product.findFirst({
+    where: { userId, isActive: true },
+    select: { id: true, name: true },
+    orderBy: { createdAt: 'asc' },
+  })
 
   const where: any = {
     product: { userId },
-    status: 'QUEUED',
-    ...(painType && { painType }),
+    status,
   }
 
-  const [opportunities, total, counts] = await Promise.all([
+  const [opportunities, total] = await Promise.all([
     prisma.opportunity.findMany({
       where,
       orderBy: { intentScore: 'desc' },
-      skip: (page - 1) * take,
       take,
       include: {
         subreddit: { select: { name: true } },
-        replies: { where: { isActive: true }, take: 1 },
+        replies: {
+          where: { isActive: true },
+          take: 1,
+          orderBy: { version: 'desc' },
+        },
         product: { select: { id: true, name: true } },
       },
     }),
     prisma.opportunity.count({ where }),
-    // Count per pain type
-    prisma.opportunity.groupBy({
-      by: ['painType'],
-      where: { product: { userId }, status: 'QUEUED' },
-      _count: true,
-    }),
   ])
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Opportunity queue</h1>
-        <p className="text-gray-500 mt-1">
-          {total > 0
-            ? `${total} threads ready for review, sorted by intent score.`
-            : 'No opportunities in queue. Subreddits are scanned every 30 minutes.'}
-        </p>
-      </div>
-
-      <OpportunityQueue
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+      <InboxView
         opportunities={opportunities as any}
         total={total}
-        page={page}
-        pages={Math.ceil(total / take)}
-        counts={counts}
-        currentPainType={painType}
+        currentStatus={status}
+        productName={product?.name ?? 'Your product'}
       />
     </div>
   )

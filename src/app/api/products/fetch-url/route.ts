@@ -1,15 +1,16 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { createClient } from '@/lib/supabase/server'
+
 import { z } from 'zod'
 
 const Schema = z.object({ url: z.string().url() })
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json().catch(() => null)
   const parsed = Schema.safeParse(body)
@@ -18,19 +19,20 @@ export async function POST(req: NextRequest) {
   try {
     const response = await fetch(parsed.data.url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; RedditOutreachBot/1.0)',
-        'Accept': 'text/html,application/xhtml+xml',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
       },
-      signal: AbortSignal.timeout(10000),
+      redirect: 'follow',
+      signal: AbortSignal.timeout(15000),
     })
 
-    if (!response.ok) {
-      return NextResponse.json({ error: `Failed to fetch URL: ${response.status}` }, { status: 400 })
-    }
-
-    const html = await response.text()
-    return NextResponse.json({ html: html.slice(0, 50000) })
+    // Accept 2xx and some 3xx; treat 4xx/5xx as soft failures (still return empty html)
+    const html = response.ok ? await response.text() : ''
+    return NextResponse.json({ html: html.slice(0, 60000) })
   } catch (e: any) {
-    return NextResponse.json({ error: e.message || 'Failed to fetch URL' }, { status: 400 })
+    // Return empty html rather than an error — the AI can still work from the URL alone
+    return NextResponse.json({ html: '' })
   }
 }

@@ -9,106 +9,138 @@ import { SAFETY } from '@/types'
 
 export const inngest = new Inngest({ id: 'reddit-outreach-tool' })
 
+// ─── Shared: scan one subreddit for one product ───────────────────────────────
+
+async function scanSubredditForProduct(
+  product: {
+    id: string; url: string; name: string; description: string
+    targetAudience: string; keyBenefits: string[]; competitors: string[]; summary: string
+  },
+  subreddit: { id: string; name: string }
+) {
+  let threads
+  try {
+    threads = await fetchNewThreads(subreddit.name, 25)
+  } catch (err: any) {
+    // Subreddit might be private or banned — skip silently
+    console.error(`Scan skipped r/${subreddit.name}: ${err.message}`)
+    return 0
+  }
+
+  const cutoffTime = new Date()
+  cutoffTime.setHours(cutoffTime.getHours() - SAFETY.MAX_THREAD_AGE_HOURS)
+
+  const profile = {
+    url: product.url, name: product.name, description: product.description,
+    targetAudience: product.targetAudience, keyBenefits: product.keyBenefits,
+    competitors: product.competitors, summary: product.summary,
+  }
+
+  let created = 0
+
+  for (const thread of threads) {
+    const threadDate = new Date(thread.created_utc * 1000)
+    if (threadDate < cutoffTime) continue
+
+    // Quality filter — skip deleted, removed, or heavily-downvoted content
+    if (thread.author === '[deleted]' || thread.author === 'AutoModerator') continue
+    if (thread.title === '[deleted]' || thread.title === '[removed]') continue
+    if (thread.selftext === '[deleted]' || thread.selftext === '[removed]') continue
+    if (thread.score < -3) continue
+
+    // Skip if already seen
+    const existing = await prisma.opportunity.findUnique({ where: { redditPostId: thread.id } })
+    if (existing) continue
+
+    let scoring
+    try {
+      scoring = await scoreOpportunity(
+        { title: thread.title, body: thread.selftext, topComments: thread.comments },
+        profile
+      )
+    } catch { continue }
+
+    if (scoring.intentScore < 30) continue
+
+    const opportunity = await prisma.opportunity.create({
+      data: {
+        productId: product.id,
+        subredditId: subreddit.id,
+        redditPostId: thread.id,
+        redditPostUrl: thread.url,
+        redditPostTitle: thread.title,
+        redditPostBody: thread.selftext || null,
+        redditAuthor: thread.author,
+        redditScore: thread.score,
+        redditCommentCount: thread.num_comments,
+        redditPostedAt: threadDate,
+        intentScore: scoring.intentScore,
+        painType: scoring.painType,
+        shouldPitch: scoring.shouldPitch,
+        scoringReasoning: scoring.reasoning,
+        status: 'QUEUED',
+      }
+    })
+
+    // Pre-generate reply so user sees it immediately in inbox
+    try {
+      const replyResult = await generateReply(
+        { title: thread.title, body: thread.selftext, subreddit: subreddit.name },
+        profile,
+        scoring.painType,
+        scoring.shouldPitch
+      )
+      await prisma.reply.create({
+        data: {
+          opportunityId: opportunity.id,
+          text: replyResult.text,
+          toneUsed: replyResult.toneUsed,
+          whyThisWorks: replyResult.whyThisWorks,
+          version: 1,
+          isActive: true,
+        }
+      })
+    } catch { /* non-fatal — user can regenerate */ }
+
+    created++
+  }
+
+  await prisma.subreddit.update({
+    where: { id: subreddit.id },
+    data: { lastScannedAt: new Date() },
+  })
+
+  return created
+}
+
 // ─── Job 1: Scan subreddits for new threads ───────────────────────────────────
+// Uses public Reddit JSON API — no user OAuth, no account, zero ban risk.
 
 export const scanSubreddits = inngest.createFunction(
   { id: 'scan-subreddits', concurrency: { limit: 5 } },
-  { cron: '*/30 * * * *' }, // every 30 minutes
+  { cron: '*/30 * * * *' },
   async ({ step }) => {
     const activeProducts = await step.run('fetch-products', async () => {
       return prisma.product.findMany({
         where: { isActive: true },
         include: {
-          subreddits: { where: { isActive: true, isBlacklisted: false, allowsPromotion: true } },
-          user: { select: { redditAccessToken: true, redditRefreshToken: true } }
+          subreddits: { where: { isActive: true, isBlacklisted: false } },
         }
       })
     })
 
+    let totalCreated = 0
+
     for (const product of activeProducts) {
-      if (!product.user.redditAccessToken || !product.user.redditRefreshToken) continue
-
       for (const subreddit of product.subreddits) {
-        await step.run(`scan-${product.id}-${subreddit.name}`, async () => {
-          const threads = await fetchNewThreads(
-            subreddit.name,
-            product.user.redditAccessToken!,
-            product.user.redditRefreshToken!
-          )
-
-          const cutoffTime = new Date()
-          cutoffTime.setHours(cutoffTime.getHours() - SAFETY.MAX_THREAD_AGE_HOURS)
-
-          for (const thread of threads) {
-            const threadDate = new Date(thread.created_utc * 1000)
-            if (threadDate < cutoffTime) continue
-
-            // Skip if already seen
-            const existing = await prisma.opportunity.findUnique({
-              where: { redditPostId: thread.id }
-            })
-            if (existing) continue
-
-            // Score the opportunity
-            const scoring = await scoreOpportunity(
-              { title: thread.title, body: thread.selftext, topComments: thread.comments },
-              { url: product.url, name: product.name, description: product.description,
-                targetAudience: product.targetAudience, keyBenefits: product.keyBenefits,
-                competitors: product.competitors, summary: product.summary }
-            )
-
-            if (scoring.intentScore < 30) continue // skip low-intent threads
-
-            // Create opportunity
-            const opportunity = await prisma.opportunity.create({
-              data: {
-                productId: product.id,
-                subredditId: subreddit.id,
-                redditPostId: thread.id,
-                redditPostUrl: thread.url,
-                redditPostTitle: thread.title,
-                redditPostBody: thread.selftext,
-                redditAuthor: thread.author,
-                redditScore: thread.score,
-                redditCommentCount: thread.num_comments,
-                redditPostedAt: threadDate,
-                intentScore: scoring.intentScore,
-                painType: scoring.painType,
-                shouldPitch: scoring.shouldPitch,
-                scoringReasoning: scoring.reasoning,
-                status: 'QUEUED',
-              }
-            })
-
-            // Pre-generate reply
-            const replyResult = await generateReply(
-              { title: thread.title, body: thread.selftext, subreddit: subreddit.name },
-              { url: product.url, name: product.name, description: product.description,
-                targetAudience: product.targetAudience, keyBenefits: product.keyBenefits,
-                competitors: product.competitors, summary: product.summary },
-              scoring.painType,
-              scoring.shouldPitch
-            )
-
-            await prisma.reply.create({
-              data: {
-                opportunityId: opportunity.id,
-                text: replyResult.text,
-                toneUsed: replyResult.toneUsed,
-                whyThisWorks: replyResult.whyThisWorks,
-                version: 1,
-                isActive: true,
-              }
-            })
-          }
-
-          await prisma.subreddit.update({
-            where: { id: subreddit.id },
-            data: { lastScannedAt: new Date() }
-          })
-        })
+        const created = await step.run(`scan-${product.id}-${subreddit.name}`, () =>
+          scanSubredditForProduct(product, subreddit)
+        )
+        totalCreated += created
       }
     }
+
+    return { totalCreated }
   }
 )
 
@@ -233,12 +265,7 @@ export const dailyWarmup = inngest.createFunction(
         const targetSub = subreddits[Math.floor(Math.random() * subreddits.length)]
         if (!targetSub) return
 
-        const threads = await fetchNewThreads(
-          targetSub.name,
-          session.user.redditAccessToken!,
-          session.user.redditRefreshToken!,
-          10
-        )
+        const threads = await fetchNewThreads(targetSub.name, 10)
 
         const thread = threads[Math.floor(Math.random() * threads.length)]
         if (!thread) return
@@ -309,4 +336,33 @@ export const healthCheck = inngest.createFunction(
   }
 )
 
-export const functions = [scanSubreddits, postApprovedReplies, dailyWarmup, healthCheck]
+// ─── Job 5: Manual scan trigger ───────────────────────────────────────────────
+
+export const manualScan = inngest.createFunction(
+  { id: 'manual-scan', concurrency: { limit: 3 } },
+  { event: 'scan/manual' },
+  async ({ event, step }) => {
+    const { userId } = event.data
+
+    const products = await step.run('fetch-products', async () => {
+      return prisma.product.findMany({
+        where: { userId, isActive: true },
+        include: { subreddits: { where: { isActive: true, isBlacklisted: false } } },
+      })
+    })
+
+    let totalCreated = 0
+    for (const product of products) {
+      for (const subreddit of product.subreddits) {
+        const created = await step.run(`scan-${product.id}-${subreddit.name}`, () =>
+          scanSubredditForProduct(product, subreddit)
+        )
+        totalCreated += created
+      }
+    }
+
+    return { totalCreated }
+  }
+)
+
+export const functions = [scanSubreddits, manualScan, postApprovedReplies, dailyWarmup, healthCheck]
