@@ -32,10 +32,10 @@ export default function ContactPage() {
 
           <div style={{ marginTop: '56px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
             {[
-              { label: 'General enquiries', email: 'hello@redgrow.ai', desc: 'Product questions, partnership ideas, or just want to say hi.' },
-              { label: 'Support', email: 'support@redgrow.ai', desc: "Having a problem with your account or a feature? We'll fix it." },
-              { label: 'Privacy & legal', email: 'privacy@redgrow.ai', desc: 'Data requests, GDPR enquiries, or legal correspondence.' },
-              { label: 'Press', email: 'press@redgrow.ai', desc: 'Writing about Reddit marketing or founder tools? We&apos;d love to chat.' },
+              { label: 'General enquiries', email: 'hello@redgrow.app', desc: 'Product questions, partnership ideas, or just want to say hi.' },
+              { label: 'Support', email: 'support@redgrow.app', desc: "Having a problem with your account or a feature? We'll fix it." },
+              { label: 'Privacy & legal', email: 'privacy@redgrow.app', desc: 'Data requests, GDPR enquiries, or legal correspondence.' },
+              { label: 'Press', email: 'press@redgrow.app', desc: 'Writing about Reddit marketing or founder tools? We&apos;d love to chat.' },
             ].map(({ label, email, desc }) => (
               <div key={label} style={{ borderTop: '1px solid var(--line)', paddingTop: '24px' }}>
                 <div className="eyebrow" style={{ marginBottom: '8px' }}>{label}</div>

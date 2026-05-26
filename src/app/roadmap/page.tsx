@@ -56,7 +56,7 @@ export default function RoadmapPage() {
             Where we&apos;re <em>headed.</em>
           </h1>
           <p style={{ fontSize: '18px', marginTop: '28px', borderTop: '1px solid var(--line)', paddingTop: '22px', maxWidth: '52ch' }}>
-            Our public roadmap. Vote for features or suggest new ones by emailing us at hello@redgrow.ai.
+            Our public roadmap. Vote for features or suggest new ones by emailing us at hello@redgrow.app.
           </p>
 
           <div style={{ marginTop: '56px', display: 'flex', flexDirection: 'column', gap: '48px' }}>
@@ -80,7 +80,7 @@ export default function RoadmapPage() {
 
           <div style={{ marginTop: '64px', padding: '32px', background: 'var(--cream-2)', borderRadius: 'var(--r-lg)', border: '1px solid var(--line)' }}>
             <div className="eyebrow" style={{ marginBottom: '10px' }}>Feature request?</div>
-            <p>Email us at <strong>hello@redgrow.ai</strong> with your idea. The features with the most votes get built next.</p>
+            <p>Email us at <strong>hello@redgrow.app</strong> with your idea. The features with the most votes get built next.</p>
           </div>
         </div>
       </section>

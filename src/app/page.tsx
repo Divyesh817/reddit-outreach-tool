@@ -24,18 +24,33 @@ export const metadata: Metadata = {
     title: 'Redgrow — Reddit Leads + GEO in One Tool',
     description: 'AI finds Reddit threads where people are ready to buy. Copy the reply, paste it yourself. No auto-posting. From $9/mo.',
   },
-  alternates: { canonical: 'https://redgrow.ai' },
+  alternates: { canonical: 'https://redgrow.app' },
 }
 
 const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'SoftwareApplication',
   name: 'Redgrow',
+  url: 'https://redgrow.app',
   applicationCategory: 'BusinessApplication',
-  description: 'AI-powered Reddit lead generation tool. Finds high-intent threads, drafts replies — you paste them yourself. No auto-posting, no ban risk.',
+  operatingSystem: 'Web',
+  description: 'AI-powered Reddit lead generation tool. Finds high-intent threads, scores buying intent, and drafts contextual replies — from $9/mo.',
   offers: [
-    { '@type': 'Offer', price: '9', priceCurrency: 'USD', name: 'Starter' },
-    { '@type': 'Offer', price: '19', priceCurrency: 'USD', name: 'Growth' },
+    { '@type': 'Offer', price: '0', priceCurrency: 'USD', name: 'Free' },
+    { '@type': 'Offer', price: '9', priceCurrency: 'USD', name: 'Starter', billingIncrement: 'monthly' },
+    { '@type': 'Offer', price: '19', priceCurrency: 'USD', name: 'Growth', billingIncrement: 'monthly' },
+  ],
+  creator: {
+    '@type': 'Person',
+    name: 'Div',
+    email: 'div@redgrow.app',
+  },
+  featureList: [
+    'Reddit intent scoring',
+    'AI reply drafting',
+    'Subreddit discovery',
+    'GEO scoring',
+    'Daily opportunity digest',
   ],
 }
 
@@ -712,7 +727,7 @@ export default function LandingPage() {
         <div className="wrap">
           <div className="section-head reveal">
             <h2>Frequently asked.</h2>
-            <p className="desc">If you don&apos;t find your answer below, email us at hello@redgrow.ai — we respond within 24 hours.</p>
+            <p className="desc">If you don&apos;t find your answer below, email us at hello@redgrow.app — we respond within 24 hours.</p>
           </div>
           <FAQAccordion />
         </div>

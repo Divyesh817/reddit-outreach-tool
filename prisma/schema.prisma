@@ -277,6 +277,32 @@ enum WarmupStatus {
   PAUSED
 }
 
+// ─── Admin: Email Templates ───────────────────────────────────────────────────
+
+model EmailTemplate {
+  id        String   @id @default(cuid())
+  key       String   @unique  // welcome | highIntent | dailyDigest | weeklySummary | geoReport
+  name      String
+  subject   String
+  html      String   @db.Text
+  variables String   @db.Text // JSON array of {name, description} pairs
+  updatedAt DateTime @updatedAt
+
+  @@map("email_templates")
+}
+
+// ─── Admin: AI Prompts ────────────────────────────────────────────────────────
+
+model AiPrompt {
+  id        String   @id @default(cuid())
+  key       String   @unique  // intent-scoring | reply-generation | comment-reply | geo-analysis | etc.
+  name      String
+  content   String   @db.Text
+  updatedAt DateTime @updatedAt
+
+  @@map("ai_prompts")
+}
+
 // ─── GEO Reports ─────────────────────────────────────────────────────────────
 
 model GeoReport {

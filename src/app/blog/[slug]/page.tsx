@@ -495,7 +495,7 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   return {
     title: `${post.title} | Redgrow Blog`,
     description: post.desc,
-    alternates: { canonical: `https://redgrow.ai/blog/${params.slug}` },
+    alternates: { canonical: `https://redgrow.app/blog/${params.slug}` },
   }
 }
 

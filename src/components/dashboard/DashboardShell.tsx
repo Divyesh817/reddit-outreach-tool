@@ -47,7 +47,11 @@ export function DashboardShell({ user, products, children, opportunityCount = 0,
   const replyPct = Math.min(100, Math.round((repliesThisMonth / replyLimit) * 100))
   const productLimit = planLimits.products
   const isFree = user.plan === 'FREE'
-  const emptySlots = Math.max(0, productLimit - products.length)
+  // FREE: always show 1 locked upgrade slot regardless of product count
+  // STARTER/GROWTH: show unlocked "Add product" slots up to plan limit
+  const lockedSlots = isFree ? 1 : 0
+  const addSlots = isFree ? 0 : Math.max(0, productLimit - products.length)
+  const upgradeLabel = user.plan === 'FREE' ? 'Upgrade to Starter' : user.plan === 'STARTER' ? 'Upgrade to Growth' : null
 
   const PLAN_DISPLAY: Record<string, string> = {
     FREE: 'Free plan',
@@ -150,16 +154,16 @@ export function DashboardShell({ user, products, children, opportunityCount = 0,
           {/* Expanded product list */}
           {productsOpen && (
             <div style={{ borderTop: `1px solid ${S.line}`, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 3 }}>
-              {/* Existing products */}
-              {products.map((p, i) => (
+              {/* Existing products — skip index 0 since it's already shown in the trigger */}
+              {products.slice(1).map((p) => (
                 <Link
                   key={p.id}
                   href={`/products/${p.id}`}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 9,
                     padding: '7px 8px', borderRadius: 7, textDecoration: 'none',
-                    background: i === 0 ? S.orangeSoft : 'transparent',
-                    border: `1px solid ${i === 0 ? S.orangeLine : 'transparent'}`,
+                    background: 'transparent',
+                    border: `1px solid transparent`,
                     transition: 'all .12s',
                   }}
                 >
@@ -171,49 +175,49 @@ export function DashboardShell({ user, products, children, opportunityCount = 0,
                   }}>
                     {p.name[0].toUpperCase()}
                   </span>
-                  <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: i === 0 ? S.orange2 : S.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: S.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {p.name}
                   </span>
-                  {i === 0 && (
-                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: S.orange, flexShrink: 0 }} />
-                  )}
                 </Link>
               ))}
 
-              {/* Empty "+" slots — add for paid, locked for free */}
-              {Array.from({ length: emptySlots }).map((_, i) => (
-                isFree ? (
-                  <div key={`locked-${i}`} style={{
-                    display: 'flex', alignItems: 'center', gap: 9,
-                    padding: '7px 8px', borderRadius: 7,
-                    border: `1px dashed ${S.line2}`, opacity: 0.6,
+              {/* Locked slots — FREE always gets 1, points to upgrade */}
+              {Array.from({ length: lockedSlots }).map((_, i) => (
+                <div key={`locked-${i}`} style={{
+                  display: 'flex', alignItems: 'center', gap: 9,
+                  padding: '7px 8px', borderRadius: 7,
+                  border: `1px dashed ${S.line2}`, opacity: 0.65,
+                }}>
+                  <span style={{
+                    width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                    background: S.line, display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>
-                    <span style={{
-                      width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-                      background: S.line, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      <svg width="10" height="10" fill="none" stroke={S.text4} strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                    </span>
-                    <span style={{ flex: 1, fontSize: 12, color: S.text4 }}>Upgrade to unlock</span>
-                    <Link href="/settings" onClick={e => e.stopPropagation()} style={{ fontSize: 10.5, color: S.orange2, textDecoration: 'none', fontWeight: 600, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '.04em' }}>
-                      ↑ Pro
+                    <svg width="10" height="10" fill="none" stroke={S.text4} strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  </span>
+                  <span style={{ flex: 1, fontSize: 12, color: S.text4 }}>Add product</span>
+                  {upgradeLabel && (
+                    <Link href="/settings" onClick={e => e.stopPropagation()} style={{ fontSize: 10.5, color: S.orange2, textDecoration: 'none', fontWeight: 600, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '.03em', whiteSpace: 'nowrap' }}>
+                      {upgradeLabel}
                     </Link>
-                  </div>
-                ) : (
-                  <Link key={`add-${i}`} href="/products" style={{
-                    display: 'flex', alignItems: 'center', gap: 9,
-                    padding: '7px 8px', borderRadius: 7, textDecoration: 'none',
-                    border: `1px dashed ${S.line2}`, transition: 'all .12s',
+                  )}
+                </div>
+              ))}
+
+              {/* Unlocked "Add product" slots — STARTER/GROWTH fill up to plan limit */}
+              {Array.from({ length: addSlots }).map((_, i) => (
+                <Link key={`add-${i}`} href="/products" style={{
+                  display: 'flex', alignItems: 'center', gap: 9,
+                  padding: '7px 8px', borderRadius: 7, textDecoration: 'none',
+                  border: `1px dashed ${S.line2}`, transition: 'all .12s',
+                }}>
+                  <span style={{
+                    width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                    background: S.line, display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>
-                    <span style={{
-                      width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-                      background: S.line, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      <svg width="10" height="10" fill="none" stroke={S.text3} strokeWidth="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                    </span>
-                    <span style={{ flex: 1, fontSize: 12.5, color: S.text3, fontWeight: 500 }}>Add product</span>
-                  </Link>
-                )
+                    <svg width="10" height="10" fill="none" stroke={S.text3} strokeWidth="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  </span>
+                  <span style={{ flex: 1, fontSize: 12.5, color: S.text3, fontWeight: 500 }}>Add product</span>
+                </Link>
               ))}
             </div>
           )}

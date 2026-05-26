@@ -36,7 +36,7 @@ export default function TermsPage() {
               { title: 'Billing', body: 'Subscriptions are billed monthly. You can cancel at any time; cancellation takes effect at the end of your current billing period. We offer a 14-day money-back guarantee on first payments.' },
               { title: 'Termination', body: 'We may suspend or terminate accounts that violate these terms, spam Reddit, or engage in any abusive activity. You may terminate your account at any time by contacting us.' },
               { title: 'Limitation of liability', body: 'Redgrow is provided as-is. We are not liable for any damages arising from your use of the service, including account restrictions imposed by Reddit.' },
-              { title: 'Contact', body: 'Questions about these terms? Email legal@redgrow.ai.' },
+              { title: 'Contact', body: 'Questions about these terms? Email legal@redgrow.app.' },
             ].map(({ title, body }) => (
               <div key={title} style={{ borderTop: '1px solid var(--line)', paddingTop: '28px' }}>
                 <h3 style={{ fontSize: '20px', marginBottom: '10px' }}>{title}</h3>

@@ -498,7 +498,7 @@ export function GeoView({ products, plan, limit }: Props) {
               )
             })}
 
-            {/* Locked products */}
+            {/* Products beyond plan limit — shown as locked */}
             {lockedCount > 0 && (
               <div style={{ background: S.panel, border: `1px solid ${S.line}`, borderRadius: 14, padding: '20px 22px', display: 'flex', alignItems: 'center', gap: 16 }}>
                 <span style={{ width: 38, height: 38, borderRadius: 9, background: S.line, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -509,7 +509,7 @@ export function GeoView({ products, plan, limit }: Props) {
                     {lockedCount} product{lockedCount !== 1 ? 's' : ''} locked
                   </p>
                   <p style={{ margin: 0, fontSize: 14, color: S.text4 }}>
-                    Upgrade to analyze more products — Growth plan unlocks 5.
+                    Upgrade to analyze more products.
                   </p>
                 </div>
                 <a href="/settings" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 15px', borderRadius: 8, fontSize: 14, fontWeight: 600, background: S.orangeSoft, border: `1px solid ${S.orangeLine}`, color: S.orange2, textDecoration: 'none' }}>

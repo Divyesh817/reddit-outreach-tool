@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import type { EmailOtpType } from '@supabase/supabase-js'
 import { prisma } from '@/lib/prisma'
+import { inngest } from '@/lib/inngest'
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
@@ -44,28 +45,49 @@ export async function GET(request: NextRequest) {
     error = result.error
   }
 
+  // Always use the configured app URL so Vercel's internal domain doesn't leak
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || origin
+
   if (!error && user) {
-    // Upsert user record in our DB
-    await prisma.user.upsert({
-      where: { id: user.id },
-      create: {
-        id: user.id,
-        email: user.email!,
-        name: user.user_metadata?.full_name ?? null,
-        avatarUrl: user.user_metadata?.avatar_url ?? null,
-      },
-      update: {
-        email: user.email!,
-        name: user.user_metadata?.full_name ?? null,
-        avatarUrl: user.user_metadata?.avatar_url ?? null,
-      },
-    })
+    // Upsert user record — non-fatal if DB is slow/unavailable
+    let isNewUser = false
+    try {
+      const existing = await prisma.user.findUnique({ where: { id: user.id }, select: { id: true } })
+      isNewUser = !existing
+      await prisma.user.upsert({
+        where: { id: user.id },
+        create: {
+          id: user.id,
+          email: user.email!,
+          name: user.user_metadata?.full_name ?? null,
+          avatarUrl: user.user_metadata?.avatar_url ?? null,
+        },
+        update: {
+          email: user.email!,
+          name: user.user_metadata?.full_name ?? null,
+          avatarUrl: user.user_metadata?.avatar_url ?? null,
+        },
+      })
+    } catch (dbErr: any) {
+      console.error('Auth callback: DB upsert failed', dbErr?.message)
+    }
+
+    // Fire welcome email job for brand-new signups
+    if (isNewUser) {
+      try {
+        await inngest.send({ name: 'user/created', data: { userId: user.id } })
+      } catch { /* non-fatal */ }
+    }
 
     // No products → onboarding; has products → dashboard
-    const productCount = await prisma.product.count({ where: { userId: user.id } })
-    const dest = productCount === 0 ? '/onboarding' : '/dashboard'
-    return NextResponse.redirect(`${origin}${dest}`)
+    let dest = '/onboarding'
+    try {
+      const productCount = await prisma.product.count({ where: { userId: user.id } })
+      dest = productCount === 0 ? '/onboarding' : '/dashboard'
+    } catch {}
+
+    return NextResponse.redirect(`${appUrl}${dest}`)
   }
 
-  return NextResponse.redirect(`${origin}/login?error=auth`)
+  return NextResponse.redirect(`${appUrl}/login?error=auth`)
 }

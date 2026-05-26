@@ -33,8 +33,8 @@ export default function PrivacyPage() {
               { title: 'Reddit data', body: 'We access Reddit through their official API using tokens you grant. We scan public Reddit threads to find opportunities for your product. We never access your private Reddit messages. All Reddit tokens are encrypted at rest.' },
               { title: 'Data retention', body: 'We retain your data for as long as your account is active. When you delete your account, we delete all your personal data and Reddit tokens within 30 days. Anonymized aggregate usage statistics may be retained.' },
               { title: 'Cookies', body: 'We use session cookies for authentication and functional cookies to remember your preferences. We do not use tracking cookies or third-party advertising cookies.' },
-              { title: 'Your rights', body: 'You can request a copy of your data, ask us to correct inaccurate data, or request deletion of your account and all associated data by emailing privacy@redgrow.ai.' },
-              { title: 'Contact', body: 'For privacy questions or requests, contact us at privacy@redgrow.ai.' },
+              { title: 'Your rights', body: 'You can request a copy of your data, ask us to correct inaccurate data, or request deletion of your account and all associated data by emailing privacy@redgrow.app.' },
+              { title: 'Contact', body: 'For privacy questions or requests, contact us at privacy@redgrow.app.' },
             ].map(({ title, body }) => (
               <div key={title} style={{ borderTop: '1px solid var(--line)', paddingTop: '28px' }}>
                 <h3 style={{ fontSize: '20px', marginBottom: '10px' }}>{title}</h3>

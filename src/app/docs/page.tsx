@@ -78,7 +78,7 @@ export default function DocsPage() {
 
           <div style={{ marginTop: '64px', padding: '32px', background: 'var(--cream-2)', borderRadius: 'var(--r-lg)', border: '1px solid var(--line)' }}>
             <div className="eyebrow" style={{ marginBottom: '10px' }}>Still stuck?</div>
-            <p>Email us at <strong>support@redgrow.ai</strong> and we&apos;ll get back to you within 24 hours.</p>
+            <p>Email us at <strong>support@redgrow.app</strong> and we&apos;ll get back to you within 24 hours.</p>
           </div>
         </div>
       </section>

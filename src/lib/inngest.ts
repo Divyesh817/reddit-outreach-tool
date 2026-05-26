@@ -6,6 +6,7 @@ import { fetchNewThreads, checkDailyPostingLimit, checkSubredditCooldown,
          checkShadowban, checkCommentVisible, fetchSubredditRules,
          fetchAccountKarma, postReply } from '@/lib/reddit'
 import { scoreOpportunity, generateReply, generateWarmupComment, runGeoAnalysis } from '@/lib/anthropic'
+import { sendWelcomeEmail, sendHighIntentAlert, sendDailyDigest, sendWeeklySummary } from '@/lib/emails'
 import { SAFETY } from '@/types'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
@@ -104,6 +105,27 @@ async function scanSubredditForProduct(
         }
       })
     } catch { /* non-fatal — user can regenerate */ }
+
+    // High-intent alert email if score >= 80 and user has pref enabled
+    if (scoring.intentScore >= 80) {
+      try {
+        const owner = await prisma.user.findUnique({
+          where: { id: (product as any).userId },
+          select: { email: true, notificationPrefs: true },
+        })
+        const prefs = (owner?.notificationPrefs as any) ?? {}
+        if (owner?.email && prefs.highIntent !== false) {
+          await sendHighIntentAlert(owner.email, {
+            productName: product.name,
+            postTitle: thread.title,
+            subreddit: subreddit.name,
+            intentScore: scoring.intentScore,
+            postUrl: thread.url,
+            opportunityId: opportunity.id,
+          })
+        }
+      } catch { /* non-fatal */ }
+    }
 
     created++
   }
@@ -474,4 +496,142 @@ export const weeklyGeoDigest = inngest.createFunction(
   }
 )
 
-export const functions = [scanSubreddits, manualScan, postApprovedReplies, dailyWarmup, healthCheck, weeklyGeoDigest]
+// ─── Job 7: Welcome email (2 min after signup) ────────────────────────────────
+
+export const welcomeEmail = inngest.createFunction(
+  { id: 'welcome-email' },
+  { event: 'user/created' },
+  async ({ event, step }) => {
+    // Wait 2 minutes before sending so it feels like a personal follow-up
+    await step.sleep('delay', 2 * 60 * 1000)
+
+    const { userId } = event.data
+    const user = await step.run('fetch-user', () =>
+      prisma.user.findUnique({ where: { id: userId }, select: { email: true, name: true } })
+    )
+    if (!user?.email) return
+
+    await step.run('send-welcome', () =>
+      sendWelcomeEmail(user.email!, user.name)
+    )
+  }
+)
+
+// ─── Job 8: Daily digest — 8am UTC every day ──────────────────────────────────
+
+export const dailyDigest = inngest.createFunction(
+  { id: 'daily-digest' },
+  { cron: '0 8 * * *' },
+  async ({ step }) => {
+    const users = await step.run('fetch-users', () =>
+      prisma.user.findMany({
+        where: { email: { not: '' } },
+        select: { id: true, email: true, name: true, notificationPrefs: true },
+      })
+    )
+
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+    yesterday.setHours(0, 0, 0, 0)
+
+    let sent = 0
+    for (const user of users) {
+      const prefs = (user.notificationPrefs as any) ?? {}
+      if (prefs.dailyDigest === false) continue
+
+      await step.run(`digest-${user.id}`, async () => {
+        const opps = await prisma.opportunity.findMany({
+          where: {
+            product: { userId: user.id },
+            createdAt: { gte: yesterday },
+            status: 'QUEUED',
+          },
+          orderBy: { intentScore: 'desc' },
+          take: 10,
+          include: { product: { select: { name: true } }, subreddit: { select: { name: true } } },
+        })
+        if (opps.length === 0) return
+
+        await sendDailyDigest(
+          user.email!,
+          user.name,
+          opps.map(o => ({
+            productName: o.product.name,
+            postTitle: o.redditPostTitle,
+            subreddit: o.subreddit.name,
+            intentScore: o.intentScore,
+          }))
+        )
+        sent++
+      })
+    }
+
+    return { sent }
+  }
+)
+
+// ─── Job 9: Weekly summary — Monday 8am UTC ───────────────────────────────────
+
+export const weeklySummary = inngest.createFunction(
+  { id: 'weekly-summary' },
+  { cron: '0 8 * * 1' },
+  async ({ step }) => {
+    const users = await step.run('fetch-users', () =>
+      prisma.user.findMany({
+        where: { email: { not: '' } },
+        select: { id: true, email: true, name: true, notificationPrefs: true },
+      })
+    )
+
+    const weekAgo = new Date()
+    weekAgo.setDate(weekAgo.getDate() - 7)
+    const weekOf = weekAgo.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+
+    let sent = 0
+    for (const user of users) {
+      const prefs = (user.notificationPrefs as any) ?? {}
+      if (prefs.weeklySummary === false) continue
+
+      await step.run(`weekly-${user.id}`, async () => {
+        const [newOpps, repliesDrafted, repliesApproved, topSubreddits] = await Promise.all([
+          prisma.opportunity.count({
+            where: { product: { userId: user.id }, createdAt: { gte: weekAgo } },
+          }),
+          prisma.reply.count({
+            where: { opportunity: { product: { userId: user.id } }, createdAt: { gte: weekAgo } },
+          }),
+          prisma.opportunity.count({
+            where: { product: { userId: user.id }, status: 'POSTED', updatedAt: { gte: weekAgo } },
+          }),
+          prisma.subreddit.findMany({
+            where: {
+              product: { userId: user.id },
+              opportunities: { some: { createdAt: { gte: weekAgo } } },
+            },
+            orderBy: { opportunities: { _count: 'desc' } },
+            take: 5,
+            select: { name: true },
+          }),
+        ])
+
+        if (newOpps === 0 && repliesDrafted === 0) return
+
+        await sendWeeklySummary(user.email!, user.name, {
+          newOpps,
+          repliesDrafted,
+          repliesApproved,
+          topSubreddits: topSubreddits.map(s => s.name),
+          weekOf,
+        })
+        sent++
+      })
+    }
+
+    return { sent }
+  }
+)
+
+export const functions = [
+  scanSubreddits, manualScan, postApprovedReplies, dailyWarmup, healthCheck,
+  weeklyGeoDigest, welcomeEmail, dailyDigest, weeklySummary,
+]

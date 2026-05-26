@@ -93,7 +93,7 @@ export async function generateMetadata({ params }: { params: { competitor: strin
   return {
     title: `${c.headline} | Redgrow`,
     description: c.summary,
-    alternates: { canonical: `https://redgrow.ai/compare/${c.slug}` },
+    alternates: { canonical: `https://redgrow.app/compare/${c.slug}` },
   }
 }
 
