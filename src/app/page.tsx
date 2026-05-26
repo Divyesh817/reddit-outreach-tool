@@ -5,24 +5,24 @@ import { LandingScript } from '@/components/landing/LandingScript'
 import './landing.css'
 
 export const metadata: Metadata = {
-  title: 'Redgrow — Find High-Intent Reddit Buyers Before Anyone Else',
+  title: 'Redgrow — Find High-Intent Reddit Leads & Show Up in AI Search',
   description:
-    'AI monitors Reddit 24/7, scores threads by buying intent, and drafts contextual replies. You approve — it posts from your own account at human pace. From $9/mo.',
+    'AI monitors Reddit 24/7, scores threads by buying intent, and drafts contextual replies. Copy the reply, paste it yourself — no auto-posting, zero ban risk. From $9/mo.',
   keywords: [
-    'reddit marketing tool', 'reddit outreach', 'reddit lead generation',
-    'reddit automation', 'reddit reply tool', 'reddit leads', 'saas marketing',
-    'redgrow', 'reddit growth tool',
+    'reddit marketing tool', 'reddit lead generation', 'reddit outreach',
+    'geo marketing', 'generative engine optimization', 'reddit ai search',
+    'reddit leads', 'saas marketing', 'redgrow', 'reddit growth tool',
   ],
   openGraph: {
-    title: 'Redgrow — Find High-Intent Reddit Buyers Before Anyone Else',
-    description: 'AI scans Reddit 24/7, scores every thread by buying intent, drafts a perfect reply. You approve. It posts from your own account. From $9/mo.',
+    title: 'Redgrow — Find High-Intent Reddit Leads & Show Up in AI Search',
+    description: 'AI scans Reddit 24/7 for warm leads. Copy the reply draft, paste it yourself. No auto-posting, no ban risk. From $9/mo.',
     type: 'website',
     images: [{ url: '/og-image.png', width: 1200, height: 630 }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Redgrow — Find High-Intent Reddit Buyers',
-    description: 'AI scans Reddit 24/7, scores threads by buying intent, drafts replies. You approve. Posts from your account. From $9/mo.',
+    title: 'Redgrow — Reddit Leads + GEO in One Tool',
+    description: 'AI finds Reddit threads where people are ready to buy. Copy the reply, paste it yourself. No auto-posting. From $9/mo.',
   },
   alternates: { canonical: 'https://redgrow.ai' },
 }
@@ -32,11 +32,10 @@ const jsonLd = {
   '@type': 'SoftwareApplication',
   name: 'Redgrow',
   applicationCategory: 'BusinessApplication',
-  description: 'AI-powered Reddit outreach tool that finds high-intent leads and posts contextual replies from your own Reddit account.',
+  description: 'AI-powered Reddit lead generation tool. Finds high-intent threads, drafts replies — you paste them yourself. No auto-posting, no ban risk.',
   offers: [
     { '@type': 'Offer', price: '9', priceCurrency: 'USD', name: 'Starter' },
     { '@type': 'Offer', price: '19', priceCurrency: 'USD', name: 'Growth' },
-    { '@type': 'Offer', price: '49', priceCurrency: 'USD', name: 'Agency' },
   ],
 }
 
@@ -56,10 +55,10 @@ export default function LandingPage() {
             <span>Redgrow</span>
           </Link>
           <div className="nav-links">
+            <Link href="#geo">GEO</Link>
             <Link href="#features">Features</Link>
             <Link href="#how">How it works</Link>
             <Link href="#pricing">Pricing</Link>
-            <Link href="/blog">Blog</Link>
           </div>
           <div className="nav-cta">
             <Link href="/login" className="login">Login</Link>
@@ -72,10 +71,10 @@ export default function LandingPage() {
       {/* MOBILE SHEET */}
       <div className="sheet" id="sheet">
         <div className="sheet-panel">
+          <Link href="#geo">GEO</Link>
           <Link href="#features">Features</Link>
           <Link href="#how">How it works</Link>
           <Link href="#pricing">Pricing</Link>
-          <Link href="/blog">Blog</Link>
           <Link href="/login">Login</Link>
           <Link href="/login" className="btn btn-primary">Get started →</Link>
         </div>
@@ -86,89 +85,108 @@ export default function LandingPage() {
         <div className="wrap">
           <div className="hero-grid">
             <div>
+              {/* Safety badge */}
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: 8,
+                background: 'var(--green-soft)', border: '1px solid rgba(31,107,63,.2)',
+                borderRadius: 99, padding: '6px 14px', marginBottom: 28,
+              }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--green)', display: 'inline-block' }} />
+                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--green)', fontWeight: 600 }}>
+                  You paste · We never auto-post · Zero ban risk
+                </span>
+              </div>
+
               <h1 className="reveal">
-                <span className="lead">The quiet way to find</span>
-                <span className="orange-word"><em>Reddit buyers</em></span>
-                <span>before anyone else.</span>
+                <span className="lead">Find Reddit buyers.</span>
+                <span className="orange-word"><em>Show up in AI search.</em></span>
+                <span>Before anyone else.</span>
               </h1>
               <p className="sub reveal">
-                AI scans Reddit every 30 minutes, scores every thread 0–100 for buying intent, and drafts a contextual reply. You approve — it posts from your own account at human pace.
+                AI scans Reddit every 30 minutes, scores threads 0–100 for buying intent, and writes a contextual reply. You copy it and paste it yourself — full control, zero ban risk.
               </p>
               <div className="hero-ctas reveal">
                 <Link href="/login" className="btn btn-orange btn-lg">Start free trial <span className="arr">→</span></Link>
-                <Link href="#demo" className="btn btn-ghost btn-lg">Watch 3-min demo</Link>
+                <Link href="#how" className="btn btn-ghost btn-lg">See how it works</Link>
               </div>
               <div className="meta-row reveal">
                 <span className="avatars">
-                  <span className="av"></span><span className="av"></span><span className="av"></span><span className="av"></span><span className="av"></span>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="https://randomuser.me/api/portraits/men/32.jpg" alt="" className="av" style={{ objectFit: 'cover' }} />
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="https://randomuser.me/api/portraits/women/44.jpg" alt="" className="av" style={{ objectFit: 'cover' }} />
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="https://randomuser.me/api/portraits/men/46.jpg" alt="" className="av" style={{ objectFit: 'cover' }} />
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="https://randomuser.me/api/portraits/women/65.jpg" alt="" className="av" style={{ objectFit: 'cover' }} />
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="https://randomuser.me/api/portraits/men/22.jpg" alt="" className="av" style={{ objectFit: 'cover' }} />
                 </span>
                 <span><b data-count="247">0</b>+ founders</span>
                 <span>•</span>
                 <span className="star">★★★★★</span> <span>4.9/5</span>
-                <span>•</span>
-                <span>14-day money-back</span>
               </div>
             </div>
 
             {/* Live feed mockup */}
             <div className="feed-card reveal" aria-hidden="true">
               <div className="feed-head">
-                <div className="title">High-intent threads</div>
-                <div className="badge"><span className="dot"></span>Live · 23 new</div>
+                <div className="title">Fresh leads · last 24h</div>
+                <div className="badge"><span className="dot"></span>Live · 18 new</div>
               </div>
               <div className="feed-list">
                 <div className="feed-item">
                   <span className="num">01</span>
                   <div>
-                    <div className="sub-tag">r/SaaS <span className="when">· 12m ago</span></div>
-                    <div className="ttl">Anyone struggling to find their first 10 paying customers? Looking for outbound advice.</div>
-                    <div className="tags"><span className="pain-pill orange">Switching</span><span className="pain-pill blue">Tool search</span></div>
+                    <div className="sub-tag">r/SaaS <span className="when">· 8m ago</span></div>
+                    <div className="ttl">Tired of Replymer being so expensive — anyone found a good alternative?</div>
+                    <div className="tags"><span className="pain-pill red">Competitor</span><span className="pain-pill orange">Switching</span></div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <span className="intent">94%</span><br />
-                    <button className="ai-reply">⚡ AI Reply</button>
+                    <span className="intent">96%</span><br />
+                    <button className="ai-reply">⚡ Draft ready</button>
                   </div>
                 </div>
                 <div className="feed-item">
                   <span className="num">02</span>
                   <div>
-                    <div className="sub-tag">r/Entrepreneur <span className="when">· 38m ago</span></div>
-                    <div className="ttl">Is anyone using Replymer and not happy? Looking for a cheaper alternative.</div>
-                    <div className="tags"><span className="pain-pill red">Competitor</span></div>
+                    <div className="sub-tag">r/Entrepreneur <span className="when">· 41m ago</span></div>
+                    <div className="ttl">Best tool for finding Reddit threads where people want outreach advice?</div>
+                    <div className="tags"><span className="pain-pill blue">Tool search</span></div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <span className="intent">88%</span><br />
-                    <button className="ai-reply">⚡ AI Reply</button>
+                    <span className="intent">89%</span><br />
+                    <button className="ai-reply">⚡ Draft ready</button>
                   </div>
                 </div>
                 <div className="feed-item">
                   <span className="num">03</span>
                   <div>
-                    <div className="sub-tag">r/startups <span className="when">· 1h ago</span></div>
-                    <div className="ttl">Best tool for Reddit outreach in 2026? Tired of manually scrolling for hours.</div>
-                    <div className="tags"><span className="pain-pill blue">Tool search</span><span className="pain-pill orange">Switching</span></div>
+                    <div className="sub-tag">r/startups <span className="when">· 2h ago</span></div>
+                    <div className="ttl">Struggling to get my first 10 customers — anyone have a system that actually works?</div>
+                    <div className="tags"><span className="pain-pill orange">Workflow pain</span></div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <span className="intent">82%</span><br />
-                    <button className="ai-reply">⚡ AI Reply</button>
+                    <span className="intent">81%</span><br />
+                    <button className="ai-reply">⚡ Draft ready</button>
                   </div>
                 </div>
                 <div className="feed-item">
                   <span className="num">04</span>
                   <div>
-                    <div className="sub-tag">r/marketing <span className="when">· 2h ago</span></div>
-                    <div className="ttl">Recommendations for a tool that monitors specific keywords across subreddits?</div>
-                    <div className="tags"><span className="pain-pill blue">Tool search</span></div>
+                    <div className="sub-tag">r/indiehackers <span className="when">· 3h ago</span></div>
+                    <div className="ttl">Is anyone using Reddit for B2B sales and actually seeing ROI?</div>
+                    <div className="tags"><span className="pain-pill blue">Tool search</span><span className="pain-pill orange">ROI pain</span></div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <span className="intent">79%</span><br />
-                    <button className="ai-reply">⚡ AI Reply</button>
+                    <span className="intent">77%</span><br />
+                    <button className="ai-reply">⚡ Draft ready</button>
                   </div>
                 </div>
               </div>
               <div className="feed-foot">
-                <span>1,247 threads matched · last 7 days</span>
-                <span>Showing 4 / 23</span>
+                <span>Only leads from last 24h · always warm</span>
+                <span>Showing 4 / 18</span>
               </div>
             </div>
           </div>
@@ -184,15 +202,100 @@ export default function LandingPage() {
         </div>
       </div>
 
-      {/* STATS */}
-      <section className="stats-section">
+      {/* GEO SECTION */}
+      <section id="geo" style={{ background: 'var(--ink)', padding: '112px 0', position: 'relative', overflow: 'hidden' }}>
+        {/* Background decoration */}
+        <div aria-hidden="true" style={{
+          position: 'absolute', top: '-80px', right: '-80px',
+          width: 480, height: 480, borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(229,75,27,.12) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }} />
         <div className="wrap">
-          <h2 className="reveal">A small operation, with <em>outsized</em> results.</h2>
-          <div className="stats-grid reveal">
-            <div className="stat"><div className="v"><span data-count="247">0</span><sup>+</sup></div><div className="l">Active founders</div></div>
-            <div className="stat"><div className="v"><span data-count="1.4">0</span><sup>M</sup></div><div className="l">Threads scanned · weekly</div></div>
-            <div className="stat"><div className="v"><span data-count="34">0</span><sup>k</sup></div><div className="l">AI replies drafted</div></div>
-            <div className="stat"><div className="v"><span data-count="12.8">0</span><sup>×</sup></div><div className="l">Avg. ROI · first 90 days</div></div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.1fr .9fr', gap: 72, alignItems: 'center' }}>
+            <div>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(229,75,27,.15)', border: '1px solid rgba(229,75,27,.3)', borderRadius: 99, padding: '6px 14px', marginBottom: 28 }}>
+                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10.5, letterSpacing: '.18em', textTransform: 'uppercase', color: 'var(--orange)', fontWeight: 600 }}>
+                  GEO — Generative Engine Optimization
+                </span>
+              </div>
+              <h2 className="reveal" style={{ color: 'var(--cream)', maxWidth: '22ch', marginBottom: 24 }}>
+                Reddit is now the <em>input</em> to what AI says about your product.
+              </h2>
+              <p className="reveal" style={{ color: 'rgba(251,246,238,.65)', fontSize: 17, lineHeight: 1.65, maxWidth: '48ch', marginBottom: 40 }}>
+                ChatGPT, Gemini, Claude, and Perplexity are trained on Reddit and pull live Reddit threads into their answers. When someone asks an AI &ldquo;what&apos;s the best tool for X,&rdquo; the answer comes from Reddit discussions. Being present in those conversations is the new SEO.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }} className="reveal">
+                {[
+                  { icon: '🤖', text: 'AI answer engines cite Reddit in 1 in 3 software product queries' },
+                  { icon: '🔍', text: 'Reddit threads rank #1–3 on Google for 68% of "best tool for X" searches' },
+                  { icon: '📈', text: 'Brands mentioned positively on Reddit see 4× more AI search citations' },
+                  { icon: '⚡', text: 'Redgrow only shows leads from the last 24h — threads still warm enough to shape the conversation' },
+                ].map(({ icon, text }) => (
+                  <div key={text} style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                    <span style={{ fontSize: 18, flexShrink: 0, lineHeight: 1.4 }}>{icon}</span>
+                    <p style={{ color: 'rgba(251,246,238,.75)', fontSize: 15, lineHeight: 1.55 }}>{text}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* GEO visual */}
+            <div className="reveal" style={{ background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.1)', borderRadius: 18, padding: '28px 24px', position: 'relative' }}>
+              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10.5, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(251,246,238,.4)', marginBottom: 20 }}>
+                AI search — live answer
+              </div>
+
+              {/* Simulated AI chat answer */}
+              <div style={{ background: 'rgba(255,255,255,.06)', borderRadius: 12, padding: '18px 20px', marginBottom: 16 }}>
+                <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+                  <div style={{ width: 28, height: 28, borderRadius: 7, background: 'var(--orange)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                  </div>
+                  <div>
+                    <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(251,246,238,.4)', marginBottom: 6 }}>User asked ChatGPT</div>
+                    <div style={{ fontSize: 14, color: 'rgba(251,246,238,.9)', lineHeight: 1.5 }}>&ldquo;What&apos;s the best Reddit outreach tool for SaaS founders?&rdquo;</div>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ background: 'rgba(255,255,255,.04)', borderRadius: 12, padding: '18px 20px' }}>
+                <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'rgba(251,246,238,.4)', marginBottom: 10 }}>AI Answer</div>
+                <p style={{ fontSize: 13.5, color: 'rgba(251,246,238,.7)', lineHeight: 1.65, marginBottom: 14 }}>
+                  Based on recent Reddit discussions, <strong style={{ color: 'var(--orange)' }}>Redgrow</strong> is frequently recommended by founders for finding high-intent Reddit threads...
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {['r/SaaS · u/jordanm — "Redgrow found us a $4k customer…"', 'r/Entrepreneur · u/priya_s — "Best $9/mo I spend…"', 'r/indiehackers · u/alex_r — "Closed 4 deals in 60 days…"'].map(src => (
+                    <div key={src} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                      <span style={{ color: 'var(--orange)', fontFamily: 'JetBrains Mono, monospace', fontSize: 10, marginTop: 3, flexShrink: 0 }}>↳</span>
+                      <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10.5, color: 'rgba(251,246,238,.45)', lineHeight: 1.4 }}>{src}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,.08)', fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: 'rgba(251,246,238,.3)', letterSpacing: '.1em', textTransform: 'uppercase' }}>
+                  Sources: 3 Reddit threads · cited in answer
+                </div>
+              </div>
+
+              <div style={{ marginTop: 18, padding: '12px 16px', borderRadius: 10, background: 'rgba(229,75,27,.12)', border: '1px solid rgba(229,75,27,.25)', fontSize: 13, color: 'rgba(251,246,238,.75)', lineHeight: 1.55 }}>
+                <strong style={{ color: 'var(--orange)' }}>The compounding effect:</strong> Every reply you post on Reddit today becomes a data point that AI cites tomorrow. Redgrow helps you be present in the right threads — consistently.
+              </div>
+            </div>
+          </div>
+
+          {/* GEO stats row */}
+          <div className="reveal" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 0, marginTop: 80, borderTop: '1px solid rgba(255,255,255,.1)' }}>
+            {[
+              { v: '73', sup: '%', label: 'Buyers research alternatives on Reddit before switching tools' },
+              { v: '3', sup: '×', label: 'More AI citations for brands with active Reddit presence' },
+              { v: '68', sup: '%', label: '"Best tool for X" searches — top result is a Reddit thread' },
+              { v: '24', sup: 'h', label: 'Redgrow only surfaces leads posted in the last 24 hours' },
+            ].map(({ v, sup, label }) => (
+              <div key={label} className="stat">
+                <div className="v"><span>{v}</span><sup>{sup}</sup></div>
+                <div className="l">{label}</div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -201,8 +304,8 @@ export default function LandingPage() {
       <section id="how">
         <div className="wrap">
           <div className="section-head reveal">
-            <h2>Three moves between <em>idea</em> and customer.</h2>
-            <p className="desc">Paste your URL, let Redgrow find the buyers, and approve a reply. That&apos;s the whole workflow. Most founders check their queue once a day and get back to building.</p>
+            <h2>Three moves between <em>found</em> and replied.</h2>
+            <p className="desc">Paste your URL, let Redgrow find the warm leads, copy the AI draft, and paste it yourself on Reddit. That&apos;s the whole workflow — no automation, no risk, full control.</p>
           </div>
 
           <div className="timeline">
@@ -218,46 +321,52 @@ export default function LandingPage() {
                 </ul>
               </div>
               <div className="tl-mock">
-                <div className="mock-line"><span>r/SaaS</span><span>2h ago</span></div>
-                <div className="mock-title">We keep losing deals to cheaper tools — anyone solved this without cutting price?</div>
-                <div className="mock-foot"><span>▲ 142 · 23 comments</span><span className="intent">91%</span></div>
+                <div className="mock-line"><span>r/SaaS</span><span>47m ago</span></div>
+                <div className="mock-title">Tired of Replymer being so expensive — anyone found a good alternative that actually finds warm leads?</div>
+                <div className="mock-foot"><span>▲ 94 · 17 comments</span><span className="intent">96%</span></div>
               </div>
             </div>
             <div className="tl-row reveal">
               <div className="tl-num">02<em>.</em></div>
               <div className="tl-text">
-                <h3>Let the AI surface the buyers.</h3>
-                <p>Every 30 minutes, Redgrow scans your watchlist subreddits and scores each thread 0–100 for buying intent. It classifies the pain type and sends you only the threads worth replying to.</p>
+                <h3>AI surfaces warm leads — from the last 24 hours only.</h3>
+                <p>Redgrow scans posts <em>and</em> comment threads across your watchlist subreddits. It scores each one 0–100 for buying intent and classifies the pain type so you only see threads worth replying to — and only while they&apos;re still warm.</p>
                 <ul>
-                  <li>Intent score 0–100</li>
-                  <li>5 pain types classified</li>
-                  <li>Real-time email alerts</li>
+                  <li>Scans posts + active comment threads</li>
+                  <li>Intent score 0–100 · 5 pain types</li>
+                  <li>Last 24h only — no stale leads</li>
                 </ul>
               </div>
               <div className="tl-mock">
-                <div className="mock-line"><span>Filters</span><span>3 active</span></div>
+                <div className="mock-line"><span>Intent filter</span><span style={{ color: 'var(--orange)' }}>active</span></div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontFamily: "'JetBrains Mono',monospace", fontSize: '11.5px', color: 'var(--ink-2)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>intent</span><span style={{ color: 'var(--orange)' }}>≥ 78%</span></div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>pain_type</span><span style={{ color: 'var(--orange)' }}>competitor, switching</span></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>intent_score</span><span style={{ color: 'var(--orange)' }}>≥ 35</span></div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>posted_within</span><span style={{ color: 'var(--orange)' }}>24h</span></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>source</span><span style={{ color: 'var(--orange)' }}>posts + comments</span></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>auto_post</span><span style={{ color: 'var(--green)' }}>never</span></div>
                 </div>
               </div>
             </div>
             <div className="tl-row reveal">
               <div className="tl-num">03<em>.</em></div>
               <div className="tl-text">
-                <h3>Approve, post, track.</h3>
-                <p>Review the AI-drafted reply in your approval queue, edit if you want, then hit approve. Redgrow posts at a randomized delay and tracks every click back to the original thread.</p>
+                <h3>Copy the draft. Paste it yourself. Stay safe.</h3>
+                <p>Review the AI-drafted reply, edit if you want, then hit Copy. You paste it directly on Reddit — your account, your timing, your words. No automation, no API access to your account, no ban risk. Ever.</p>
                 <ul>
-                  <li>Empathy-first AI drafts</li>
-                  <li>Safe posting schedule</li>
-                  <li>Click-level attribution</li>
+                  <li>Copy with one click</li>
+                  <li>You post it — full control</li>
+                  <li>Zero Reddit ToS risk</li>
                 </ul>
               </div>
               <div className="tl-mock">
-                <div className="mock-line"><span>AI ✦ Draft</span><span style={{ color: 'var(--orange)' }}>Helpful tone</span></div>
+                <div className="mock-line"><span>AI ✦ Draft</span><span style={{ color: 'var(--orange)' }}>Empathetic peer</span></div>
                 <div className="ln w95"></div><div className="ln w80"></div><div className="ln w70 acc"></div><div className="ln w60"></div>
-                <div className="mock-foot"><span>Post to r/SaaS</span><span>↗ tracked</span></div>
+                <div className="mock-foot">
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ background: 'var(--green-soft)', color: 'var(--green)', padding: '3px 8px', borderRadius: 4, fontSize: 10, fontFamily: 'JetBrains Mono, monospace', fontWeight: 600 }}>⊕ Copy reply</span>
+                  </span>
+                  <span>Paste to Reddit yourself →</span>
+                </div>
               </div>
             </div>
           </div>
@@ -277,44 +386,43 @@ export default function LandingPage() {
       <section id="features" className="features-wrap">
         <div className="wrap">
           <div className="section-head reveal">
-            <h2>Four ways founders use <em>Redgrow</em>.</h2>
-            <p className="desc">From intent-based listening to post-click attribution, Redgrow handles the full lifecycle of Reddit outreach — so you can focus on the conversations that matter.</p>
+            <h2>Four ways Redgrow <em>actually works</em>.</h2>
+            <p className="desc">Intent-based lead discovery, AI reply drafting, subreddit intelligence, and GEO coverage — all without touching your Reddit account. You stay in control of every post.</p>
           </div>
 
           {/* Feature 01 */}
           <div className="feature-row reveal">
             <div className="f-text">
-              <span className="eyebrow">Feature 01 — Intent listening</span>
-              <h3>Never miss a buyer asking for your exact solution.</h3>
-              <p>AI monitors 50+ buying signals across every subreddit in your watchlist. When intent crosses your threshold, you&apos;re first in the queue.</p>
+              <span className="eyebrow">Feature 01 — Intent detection</span>
+              <h3>Catch warm leads in posts <em>and</em> comment threads.</h3>
+              <p>Most tools only scan post titles. Redgrow scans both new posts and active comment threads — catching buyers who show up mid-conversation, not just when they start one.</p>
               <ul className="f-list">
-                <li><span className="nm">.001</span><span>50+ pre-built buying signals, always on</span></li>
-                <li><span className="nm">.002</span><span>Custom keyword library, tuned to your product</span></li>
-                <li><span className="nm">.003</span><span>Instant Slack & email alerts on new matches</span></li>
+                <li><span className="nm">.001</span><span>Scans post titles, bodies, and comment streams</span></li>
+                <li><span className="nm">.002</span><span>Keyword pre-filter + Claude intent scoring</span></li>
+                <li><span className="nm">.003</span><span>Only last 24h — no stale, cold leads</span></li>
               </ul>
             </div>
             <div className="f-mock">
               <div className="mh">
-                <div className="mh-title">/keywords</div>
-                <div className="mh-pill">24 tracked</div>
+                <div className="mh-title">/scan · live</div>
+                <div className="mh-pill" style={{ background: 'var(--green-soft)', color: 'var(--green)' }}>24h only</div>
               </div>
-              <div className="kw-grid">
-                <span className="kw on">#alternative to <span className="x">×</span></span>
-                <span className="kw on">#looking for tool <span className="x">×</span></span>
-                <span className="kw">#recommend</span>
-                <span className="kw on">#switching from <span className="x">×</span></span>
-                <span className="kw">#vs competitor</span>
-                <span className="kw on">#best app for <span className="x">×</span></span>
-                <span className="kw">#anyone using</span>
-                <span className="kw on">#tired of <span className="x">×</span></span>
-                <span className="kw">#how do you</span>
-                <span className="kw on">#manual sucks <span className="x">×</span></span>
-              </div>
-              <div style={{ marginTop: '18px', borderTop: '1px solid var(--line)', paddingTop: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontFamily: "'JetBrains Mono',monospace", fontSize: '11.5px', color: 'var(--ink-3)' }}>
-                <span>notify_on_match: true</span>
-                <span style={{ width: '32px', height: '18px', borderRadius: '999px', background: 'var(--orange)', position: 'relative', display: 'inline-block' }}>
-                  <span style={{ position: 'absolute', right: '2px', top: '2px', width: '14px', height: '14px', borderRadius: '50%', background: '#fff', display: 'block' }}></span>
-                </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {[
+                  { sub: 'r/SaaS', time: '8m ago', score: 96, type: 'Competitor', src: 'post' },
+                  { sub: 'r/Entrepreneur', time: '1h ago', score: 88, type: 'Tool search', src: 'comment thread' },
+                  { sub: 'r/startups', time: '3h ago', score: 81, type: 'Workflow pain', src: 'post' },
+                ].map(item => (
+                  <div key={item.sub} style={{ background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: 8, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10.5, color: 'var(--ink-3)', marginBottom: 4, display: 'flex', gap: 8 }}>
+                        <span>{item.sub}</span><span>·</span><span>{item.time}</span><span>·</span><span style={{ color: 'var(--orange)' }}>{item.src}</span>
+                      </div>
+                      <div style={{ fontSize: '10px', background: 'var(--orange-soft)', color: '#9c2f0d', padding: '2px 7px', borderRadius: 4, display: 'inline-block', fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>{item.type}</div>
+                    </div>
+                    <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 20, fontWeight: 700, color: 'var(--orange)' }}>{item.score}</div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -323,12 +431,12 @@ export default function LandingPage() {
           <div className="feature-row flip reveal">
             <div className="f-text">
               <span className="eyebrow">Feature 02 — AI reply composer</span>
-              <h3>Every reply reads like a human wrote it. Because it did.</h3>
-              <p>Claude drafts contextual, empathy-first replies that match the subreddit tone. Review, edit if needed, and approve in one click.</p>
+              <h3>Every draft reads like a human wrote it. Because you post it.</h3>
+              <p>Claude drafts contextual, empathy-first replies that match the subreddit tone. Review, edit if needed, copy with one click — then paste it on Reddit yourself. Your account, your words.</p>
               <ul className="f-list">
-                <li><span className="nm">.001</span><span>Pain-type–aware reply drafts, every time</span></li>
-                <li><span className="nm">.002</span><span>Tone modes: helpful, casual, expert</span></li>
-                <li><span className="nm">.003</span><span>Never starts with your product name</span></li>
+                <li><span className="nm">.001</span><span>Pain-type–aware drafts, every time</span></li>
+                <li><span className="nm">.002</span><span>Tone modes: helpful peer, casual, expert</span></li>
+                <li><span className="nm">.003</span><span>Never auto-posts — you paste, you control</span></li>
               </ul>
             </div>
             <div className="f-mock">
@@ -350,7 +458,10 @@ export default function LandingPage() {
                   <span className="tone">Casual</span>
                   <span className="tone">Expert</span>
                 </div>
-                <button className="btn btn-orange btn-sm">Post →</button>
+                <button className="btn btn-orange btn-sm">Copy →</button>
+              </div>
+              <div style={{ marginTop: 12, padding: '10px 14px', background: 'var(--green-soft)', border: '1px solid rgba(31,107,63,.2)', borderRadius: 8, fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: 'var(--green)', letterSpacing: '.06em', textTransform: 'uppercase' }}>
+                ✓ You paste to Reddit · No auto-post
               </div>
             </div>
           </div>
@@ -358,13 +469,13 @@ export default function LandingPage() {
           {/* Feature 03 */}
           <div className="feature-row reveal">
             <div className="f-text">
-              <span className="eyebrow">Feature 03 — Subreddit intelligence</span>
-              <h3>Know exactly which communities are worth your time.</h3>
-              <p>Every subreddit in your watchlist is ranked by match volume, trend, and conversion. Cut the noise, double down on what works.</p>
+              <span className="eyebrow">Feature 03 — GEO coverage</span>
+              <h3>Reddit replies today become AI citations tomorrow.</h3>
+              <p>AI search tools pull from Reddit constantly. Every reply you post in a relevant thread builds your GEO presence — Redgrow shows you exactly which threads are worth joining for maximum AI search coverage.</p>
               <ul className="f-list">
-                <li><span className="nm">.001</span><span>AI-ranked community suggestions on setup</span></li>
-                <li><span className="nm">.002</span><span>Safety score per subreddit, updated weekly</span></li>
-                <li><span className="nm">.003</span><span>Auto-blacklist on removal patterns</span></li>
+                <li><span className="nm">.001</span><span>AI-ranked subreddits by GEO signal strength</span></li>
+                <li><span className="nm">.002</span><span>High-authority threads likely to be AI-cited</span></li>
+                <li><span className="nm">.003</span><span>Track your Reddit → AI search footprint</span></li>
               </ul>
             </div>
             <div className="f-mock">
@@ -373,12 +484,12 @@ export default function LandingPage() {
                 <div className="mh-pill">9 monitored</div>
               </div>
               <div className="sr-grid">
-                <div className="sr-tile on"><div className="name">r/SaaS</div><div className="num">348</div><div className="lbl">matches · 7d</div><div className="delta">▲ 22%</div></div>
-                <div className="sr-tile"><div className="name">r/startups</div><div className="num">212</div><div className="lbl">matches · 7d</div><div className="delta">▲ 14%</div></div>
-                <div className="sr-tile"><div className="name">r/Entrepreneur</div><div className="num">189</div><div className="lbl">matches · 7d</div><div className="delta">▲ 9%</div></div>
-                <div className="sr-tile"><div className="name">r/marketing</div><div className="num">143</div><div className="lbl">matches · 7d</div><div className="delta">▲ 18%</div></div>
-                <div className="sr-tile on"><div className="name">r/indiehackers</div><div className="num">121</div><div className="lbl">matches · 7d</div><div className="delta">▲ 31%</div></div>
-                <div className="sr-tile"><div className="name">r/smallbiz</div><div className="num">88</div><div className="lbl">matches · 7d</div><div className="delta">▲ 6%</div></div>
+                <div className="sr-tile on"><div className="name">r/SaaS</div><div className="num">348</div><div className="lbl">leads · 7d</div><div className="delta">▲ GEO HIGH</div></div>
+                <div className="sr-tile"><div className="name">r/startups</div><div className="num">212</div><div className="lbl">leads · 7d</div><div className="delta">▲ 14%</div></div>
+                <div className="sr-tile"><div className="name">r/Entrepreneur</div><div className="num">189</div><div className="lbl">leads · 7d</div><div className="delta">▲ 9%</div></div>
+                <div className="sr-tile"><div className="name">r/marketing</div><div className="num">143</div><div className="lbl">leads · 7d</div><div className="delta">▲ 18%</div></div>
+                <div className="sr-tile on"><div className="name">r/indiehackers</div><div className="num">121</div><div className="lbl">leads · 7d</div><div className="delta">▲ GEO HIGH</div></div>
+                <div className="sr-tile"><div className="name">r/smallbiz</div><div className="num">88</div><div className="lbl">leads · 7d</div><div className="delta">▲ 6%</div></div>
               </div>
             </div>
           </div>
@@ -386,39 +497,33 @@ export default function LandingPage() {
           {/* Feature 04 */}
           <div className="feature-row flip reveal">
             <div className="f-text">
-              <span className="eyebrow">Feature 04 — Conversion tracking</span>
-              <h3>Know your exact Reddit ROI, thread by thread.</h3>
-              <p>Every reply gets a tracked link. See which threads sent traffic, which converted, and what your return actually is.</p>
+              <span className="eyebrow">Feature 04 — Zero ban risk</span>
+              <h3>Your account. Your timing. Your reputation.</h3>
+              <p>Redgrow never touches your Reddit account. There&apos;s no OAuth, no API access, no automation. You copy the draft, open the thread, paste, post — Reddit sees a human. Because it is one.</p>
               <ul className="f-list">
-                <li><span className="nm">.001</span><span>Per-thread attribution, automatically</span></li>
-                <li><span className="nm">.002</span><span>Revenue tracking via UTMs</span></li>
-                <li><span className="nm">.003</span><span>Weekly digest email with top performers</span></li>
+                <li><span className="nm">.001</span><span>No Reddit API access — ever</span></li>
+                <li><span className="nm">.002</span><span>No auto-posting, no bots, no risk</span></li>
+                <li><span className="nm">.003</span><span>Compliant with Reddit ToS by design</span></li>
               </ul>
             </div>
             <div className="f-mock">
               <div className="mh">
-                <div className="mh-title">/analytics</div>
-                <div className="mh-pill">Last 30 days</div>
+                <div className="mh-title">/safety</div>
+                <div className="mh-pill" style={{ background: 'var(--green-soft)', color: 'var(--green)' }}>All clear</div>
               </div>
-              <div className="chart-wrap">
-                <div className="chart-stats">
-                  <div className="chart-stat"><div className="lbl">Reach</div><div className="val">42.1k</div><div className="delta">▲ 18%</div></div>
-                  <div className="chart-stat"><div className="lbl">Clicks</div><div className="val">1,283</div><div className="delta">▲ 9%</div></div>
-                  <div className="chart-stat"><div className="lbl">Convert</div><div className="val">3.4%</div><div className="delta">▲ 0.6</div></div>
-                </div>
-                <div className="chart">
-                  <svg viewBox="0 0 320 100" preserveAspectRatio="none" style={{ width: '100%', height: '100%' }}>
-                    <defs>
-                      <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#E54B1B" stopOpacity=".25" />
-                        <stop offset="100%" stopColor="#E54B1B" stopOpacity="0" />
-                      </linearGradient>
-                    </defs>
-                    <path d="M0,82 L32,76 L64,78 L96,60 L128,62 L160,45 L192,48 L224,32 L256,28 L288,18 L320,10 L320,100 L0,100 Z" fill="url(#g1)" />
-                    <path d="M0,82 L32,76 L64,78 L96,60 L128,62 L160,45 L192,48 L224,32 L256,28 L288,18 L320,10" fill="none" stroke="#E54B1B" strokeWidth="2" strokeLinecap="round" />
-                    <line x1="0" y1="82" x2="320" y2="10" stroke="rgba(22,18,16,.1)" strokeWidth="1" strokeDasharray="2 4" />
-                  </svg>
-                </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {[
+                  { label: 'Reddit API access', val: 'None', ok: true },
+                  { label: 'Auto-posting', val: 'Disabled', ok: true },
+                  { label: 'Account tokens stored', val: 'Never', ok: true },
+                  { label: 'ToS compliance', val: 'Full', ok: true },
+                  { label: 'Ban risk', val: 'Zero', ok: true },
+                ].map(item => (
+                  <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 14px', background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: 8 }}>
+                    <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11.5, color: 'var(--ink-3)' }}>{item.label}</span>
+                    <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11.5, fontWeight: 700, color: 'var(--green)', background: 'var(--green-soft)', padding: '3px 9px', borderRadius: 4 }}>{item.val}</span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -429,7 +534,7 @@ export default function LandingPage() {
       <div className="pq reveal">
         <div className="narrow">
           <div className="marks">&ldquo;</div>
-          <blockquote>I used to spend 3 hours a day scrolling Reddit for leads. Now I spend <em>15 minutes</em> approving what Redgrow finds for me.</blockquote>
+          <blockquote>I used to spend 3 hours a day scrolling Reddit for leads. Now I spend <em>15 minutes</em> copying and pasting what Redgrow finds for me.</blockquote>
           <cite>— <b>Sarah K.</b>, Head of Growth · Foundry</cite>
         </div>
       </div>
@@ -439,12 +544,12 @@ export default function LandingPage() {
         <div className="wrap">
           <div className="section-head reveal">
             <h2>What founders are <em>saying</em>.</h2>
-            <p className="desc">247 founders chose Redgrow over the alternatives. Here&apos;s what changed after they did.</p>
+            <p className="desc">247 founders chose Redgrow over scrolling manually. Here&apos;s what changed after they did.</p>
           </div>
           <div className="testi-grid">
             <div className="testi reveal">
               <span className="stars">★★★★★</span>
-              <p>&ldquo;I was skeptical — Reddit marketing seemed risky. But Redgrow&apos;s safety layer is real. My replies get upvotes, my account is healthy, and I&apos;ve closed four deals from it in 60 days.&rdquo;</p>
+              <p>&ldquo;The fact that I post everything myself is actually the key feature. No automation nerves, no worrying about Reddit bans. Redgrow just hands me a great reply and I paste it. Closed four deals in 60 days.&rdquo;</p>
               <div className="who">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src="https://randomuser.me/api/portraits/men/32.jpg" alt="Alex R." className="av" style={{ objectFit: 'cover' }} />
@@ -453,7 +558,7 @@ export default function LandingPage() {
             </div>
             <div className="testi reveal">
               <span className="stars">★★★★★</span>
-              <p>&ldquo;The intent scoring is the killer feature. I&apos;m only replying to threads where someone is actively looking to switch. My close rate from Reddit is higher than any other channel.&rdquo;</p>
+              <p>&ldquo;The 24h-only filter is genius. Every lead in my queue is still hot. I reply within the same day and my response rate is insane compared to when I was digging through week-old threads manually.&rdquo;</p>
               <div className="who">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src="https://randomuser.me/api/portraits/men/46.jpg" alt="Jordan M." className="av" style={{ objectFit: 'cover' }} />
@@ -462,11 +567,11 @@ export default function LandingPage() {
             </div>
             <div className="testi reveal">
               <span className="stars">★★★★★</span>
-              <p>&ldquo;Set it up on a Saturday. By Monday I had three inbound messages from people who saw my replies. That&apos;s a 48-hour payback on a $9/month subscription.&rdquo;</p>
+              <p>&ldquo;Set it up Saturday. By Monday I had three DMs from people who saw my replies. And Perplexity is now citing one of my Reddit answers when people ask about my category. That GEO thing is real.&rdquo;</p>
               <div className="who">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="https://randomuser.me/api/portraits/women/65.jpg" alt="Priya S." className="av" style={{ objectFit: 'cover' }} />
-                <div><strong>Priya S.</strong><span>Founder · Lumen</span></div>
+                <img src="https://randomuser.me/api/portraits/women/65.jpg" alt="Caithlyn S." className="av" style={{ objectFit: 'cover' }} />
+                <div><strong>Caithlyn S.</strong><span>Founder · Lumen</span></div>
               </div>
             </div>
           </div>
@@ -478,7 +583,7 @@ export default function LandingPage() {
         <div className="wrap">
           <div className="section-head reveal">
             <h2>The before and <em>after</em>.</h2>
-            <p className="desc">Most founders try Reddit manually for a few weeks, burn out, and give up. Redgrow is how the persistent ones finally make it work.</p>
+            <p className="desc">Most founders try Reddit manually for a few weeks, burn out, and give up. Redgrow is how the persistent ones finally make it work — safely.</p>
           </div>
           <div className="compare reveal">
             <div className="col without">
@@ -486,41 +591,119 @@ export default function LandingPage() {
               <h3>The manual way.</h3>
               <ul>
                 <li><span className="mk x">✕</span>Spend 2–3 hours/day scrolling Reddit with no system</li>
-                <li><span className="mk x">✕</span>Miss the high-intent buyers buried in low-karma threads</li>
-                <li><span className="mk x">✕</span>Arrive 6+ hours late — after the thread has cooled down</li>
-                <li><span className="mk x">✕</span>No way to track which posts actually drive signups</li>
-                <li><span className="mk x">✕</span>Post too aggressively, get flagged, start over</li>
-                <li><span className="mk x">✕</span>Write every reply from scratch — inconsistently</li>
+                <li><span className="mk x">✕</span>Miss warm leads buried in comment threads of old posts</li>
+                <li><span className="mk x">✕</span>Arrive hours late — thread already cooled down</li>
+                <li><span className="mk x">✕</span>Use auto-posting tools and risk account bans</li>
+                <li><span className="mk x">✕</span>Invisible to AI search — no Reddit presence building up</li>
+                <li><span className="mk x">✕</span>Write every reply from scratch, inconsistently</li>
               </ul>
             </div>
             <div className="col with">
               <div className="head">After / with Redgrow</div>
               <h3>The Redgrow way.</h3>
               <ul>
-                <li><span className="mk v">✓</span>Curated queue of high-intent threads delivered daily</li>
-                <li><span className="mk v">✓</span>Never miss a buyer — AI scans 1.4M threads per week</li>
-                <li><span className="mk v">✓</span>Be first to reply with an AI draft already waiting</li>
-                <li><span className="mk v">✓</span>Full attribution: see exactly which thread converted</li>
-                <li><span className="mk v">✓</span>Safe posting schedule with warmup protection built in</li>
-                <li><span className="mk v">✓</span>Consistent, on-brand replies drafted and ready to approve</li>
+                <li><span className="mk v">✓</span>Curated queue of warm leads from last 24h — delivered daily</li>
+                <li><span className="mk v">✓</span>Catches leads in posts AND active comment threads</li>
+                <li><span className="mk v">✓</span>Reply while threads are still hot — be first every time</li>
+                <li><span className="mk v">✓</span>You paste every reply — no automation, no ban risk ever</li>
+                <li><span className="mk v">✓</span>Build GEO presence — AI cites your Reddit replies</li>
+                <li><span className="mk v">✓</span>Consistent, on-brand drafts — copy and paste in 60 seconds</li>
               </ul>
             </div>
           </div>
         </div>
       </section>
 
-      {/* VIDEO / DEMO */}
-      <section className="video-section" id="demo">
-        <div className="video-wrap reveal">
-          <h2 style={{ marginTop: '14px' }}>See <em>Redgrow</em> in motion.</h2>
-          <div className="video-frame" style={{ marginTop: '42px' }}>
-            <div className="corner"><span className="rec"></span>REDGROW · DEMO REEL</div>
-            <button className="play" aria-label="Play demo">
-              <svg width="22" height="24" viewBox="0 0 22 24" fill="currentColor"><path d="M2 2 L20 12 L2 22 Z" /></svg>
-            </button>
-            <div className="vtime">03:14 / 03:14</div>
+      {/* PRICING */}
+      <section id="pricing" style={{ padding: '100px 0', background: 'var(--bg)' }}>
+        <div className="wrap">
+          <div className="section-head reveal" style={{ marginBottom: 56 }}>
+            <h2>Simple pricing. No surprises.</h2>
+            <p className="desc">Start free. Upgrade when it&apos;s paying for itself — which usually happens on the first lead.</p>
           </div>
-          <div className="video-caption">Watch the 3-minute demo · No signup required</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 20, maxWidth: 860, margin: '0 auto' }}>
+            {/* Free */}
+            <div className="reveal" style={{ borderRadius: 16, border: '1px solid var(--line)', background: 'var(--card)', padding: '28px 26px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div>
+                <p style={{ margin: '0 0 6px', fontSize: 13, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text3)', fontFamily: 'JetBrains Mono, monospace' }}>Free</p>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                  <span style={{ fontSize: 36, fontWeight: 800, color: 'var(--text)', letterSpacing: '-.03em' }}>$0</span>
+                  <span style={{ fontSize: 15, color: 'var(--text3)' }}>/mo</span>
+                </div>
+                <p style={{ margin: '8px 0 0', fontSize: 14, color: 'var(--text3)', lineHeight: 1.55 }}>Get a feel for what Redgrow finds before you commit.</p>
+              </div>
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 9, flex: 1 }}>
+                {['1 product', '100 opps / month', '20 reply drafts', '2 scans / day', '5 subreddits'].map(f => (
+                  <li key={f} style={{ fontSize: 14.5, color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 9 }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--green)" strokeWidth="2.8"><polyline points="20 6 9 17 4 12"/></svg>
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              <Link href="/login" style={{ display: 'block', textAlign: 'center', padding: '11px 0', borderRadius: 10, fontSize: 15, fontWeight: 700, background: 'var(--panel2)', border: '1px solid var(--line2)', color: 'var(--text)', textDecoration: 'none' }}>
+                Start free
+              </Link>
+            </div>
+
+            {/* Starter */}
+            <div className="reveal" style={{ borderRadius: 16, border: '1.5px solid var(--orange)', background: 'var(--card)', padding: '28px 26px', display: 'flex', flexDirection: 'column', gap: 20, position: 'relative' }}>
+              <div style={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', background: 'var(--orange)', color: '#fff', fontSize: 11, fontWeight: 700, padding: '3px 12px', borderRadius: 99, letterSpacing: '.08em', textTransform: 'uppercase', fontFamily: 'JetBrains Mono, monospace', whiteSpace: 'nowrap' }}>
+                Most popular
+              </div>
+              <div>
+                <p style={{ margin: '0 0 6px', fontSize: 13, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--orange)', fontFamily: 'JetBrains Mono, monospace' }}>Starter</p>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                  <span style={{ fontSize: 36, fontWeight: 800, color: 'var(--text)', letterSpacing: '-.03em' }}>$9</span>
+                  <span style={{ fontSize: 15, color: 'var(--text3)' }}>/mo</span>
+                </div>
+                <p style={{ margin: '8px 0 0', fontSize: 14, color: 'var(--text3)', lineHeight: 1.55 }}>For founders actively building their distribution pipeline.</p>
+              </div>
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 9, flex: 1 }}>
+                {['3 products', '500 opps / month', '150 reply drafts', '10 scans / day', '15 subreddits per product', 'GEO analysis'].map(f => (
+                  <li key={f} style={{ fontSize: 14.5, color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 9 }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--green)" strokeWidth="2.8"><polyline points="20 6 9 17 4 12"/></svg>
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              <Link href="/login" style={{ display: 'block', textAlign: 'center', padding: '11px 0', borderRadius: 10, fontSize: 15, fontWeight: 700, background: 'var(--orange)', color: '#fff', textDecoration: 'none' }}>
+                Get started →
+              </Link>
+            </div>
+
+            {/* Growth */}
+            <div className="reveal" style={{ borderRadius: 16, border: '1px solid var(--line)', background: 'var(--card)', padding: '28px 26px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div>
+                <p style={{ margin: '0 0 6px', fontSize: 13, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text3)', fontFamily: 'JetBrains Mono, monospace' }}>Growth</p>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                  <span style={{ fontSize: 36, fontWeight: 800, color: 'var(--text)', letterSpacing: '-.03em' }}>$19</span>
+                  <span style={{ fontSize: 15, color: 'var(--text3)' }}>/mo</span>
+                </div>
+                <p style={{ margin: '8px 0 0', fontSize: 14, color: 'var(--text3)', lineHeight: 1.55 }}>For teams running Reddit as a serious acquisition channel.</p>
+              </div>
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 9, flex: 1 }}>
+                {['5 products', '2,000 opps / month', '500 reply drafts', 'Unlimited scans', '30 subreddits per product', 'GEO analysis', 'Priority support'].map(f => (
+                  <li key={f} style={{ fontSize: 14.5, color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 9 }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--green)" strokeWidth="2.8"><polyline points="20 6 9 17 4 12"/></svg>
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              <Link href="/login" style={{ display: 'block', textAlign: 'center', padding: '11px 0', borderRadius: 10, fontSize: 15, fontWeight: 700, background: 'var(--panel2)', border: '1px solid var(--line2)', color: 'var(--text)', textDecoration: 'none' }}>
+                Get started →
+              </Link>
+            </div>
+          </div>
+
+          {/* Guarantee row */}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 32, marginTop: 36, flexWrap: 'wrap' }}>
+            {['14-day money-back guarantee', 'Cancel anytime', 'No auto-posting · zero ban risk', 'Switch plans anytime'].map(t => (
+              <span key={t} style={{ fontSize: 13.5, color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: 7 }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--green)" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                {t}
+              </span>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -548,12 +731,13 @@ export default function LandingPage() {
               <line x1="12" y1="6.5" x2="12" y2="10" stroke="#E54B1B" strokeWidth="1.4" />
             </svg>
           </div>
-          <h2>Stop scrolling. <em>Start growing.</em></h2>
-          <p>Reddit has 500 million active users. Thousands of them are asking for exactly what you&apos;ve built — right now, in threads you&apos;ll never read. Redgrow makes sure you&apos;re there when they do.</p>
+          <h2>Stop scrolling. <em>Start showing up.</em></h2>
+          <p>Reddit has 500M active users — and AI search is citing their conversations daily. Thousands of warm leads are asking for your product right now. Redgrow finds them, drafts the reply, you paste it. That&apos;s it.</p>
           <Link href="/login" className="btn btn-orange btn-lg" style={{ marginTop: '10px' }}>Start your free trial <span className="arr">→</span></Link>
           <div className="trust-row">
             <span>Starts at $9/mo</span><span className="dot"></span>
             <span>14-day money-back</span><span className="dot"></span>
+            <span>No auto-posting</span><span className="dot"></span>
             <span>Cancel anytime</span>
           </div>
         </div>
@@ -565,14 +749,14 @@ export default function LandingPage() {
           <div className="foot-grid">
             <div className="foot-brand">
               <Link href="/" className="logo"><span className="logo-mark"></span>Redgrow</Link>
-              <p>The intelligent Reddit outreach tool for founders who don&apos;t have 3 hours to scroll.</p>
+              <p>Find warm Reddit leads and build GEO presence — without touching your account or risking a ban.</p>
             </div>
             <div>
               <h5>Product</h5>
               <ul>
                 <li><Link href="#features">Features</Link></li>
+                <li><Link href="#geo">GEO Guide</Link></li>
                 <li><Link href="#pricing">Pricing</Link></li>
-                <li><Link href="/roadmap">Roadmap</Link></li>
               </ul>
             </div>
             <div>
@@ -601,7 +785,7 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="foot-bottom">
-            <div>© 2026 Redgrow · All rights reserved</div>
+            <div>© 2026 Redgrow · All rights reserved · No auto-posting, ever.</div>
           </div>
         </div>
       </footer>

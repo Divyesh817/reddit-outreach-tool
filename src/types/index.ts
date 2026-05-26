@@ -2,7 +2,7 @@
 
 // ─── Enums (mirror Prisma) ────────────────────────────────────────────────────
 
-export type Plan = 'STARTER' | 'GROWTH' | 'AGENCY'
+export type Plan = 'FREE' | 'STARTER' | 'GROWTH'
 
 export type PainType =
   | 'competitor_frustration'
@@ -47,10 +47,42 @@ export const PLAN_LIMITS: Record<Plan, {
   opportunitiesPerMonth: number
   repliesPerMonth: number
   price: number
+  // Scan config
+  scansPerDay: number
+  threadsPerSubreddit: number
+  lookbackHours: number
+  subredditsPerProduct: number
 }> = {
-  STARTER: { products: 1, opportunitiesPerMonth: 200, repliesPerMonth: 60, price: 9 },
-  GROWTH:  { products: 3, opportunitiesPerMonth: 1000, repliesPerMonth: 300, price: 19 },
-  AGENCY:  { products: 10, opportunitiesPerMonth: 5000, repliesPerMonth: 99999, price: 49 },
+  FREE: {
+    products: 1,
+    opportunitiesPerMonth: 100,
+    repliesPerMonth: 20,
+    price: 0,
+    scansPerDay: 2,
+    threadsPerSubreddit: 25,
+    lookbackHours: 48,
+    subredditsPerProduct: 5,
+  },
+  STARTER: {
+    products: 3,
+    opportunitiesPerMonth: 500,
+    repliesPerMonth: 150,
+    price: 9,
+    scansPerDay: 10,
+    threadsPerSubreddit: 50,
+    lookbackHours: 72,
+    subredditsPerProduct: 15,
+  },
+  GROWTH: {
+    products: 5,
+    opportunitiesPerMonth: 2000,
+    repliesPerMonth: 500,
+    price: 19,
+    scansPerDay: 9999,
+    threadsPerSubreddit: 100,
+    lookbackHours: 168,
+    subredditsPerProduct: 30,
+  },
 }
 
 // ─── Safety Constants ─────────────────────────────────────────────────────────

@@ -11,10 +11,12 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const supabase = createClient()
 
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '')
+
   async function handleGoogle() {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${location.origin}/auth/callback` },
+      options: { redirectTo: `${appUrl}/auth/callback` },
     })
   }
 
@@ -25,7 +27,7 @@ export default function LoginPage() {
     setError('')
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${location.origin}/auth/callback` },
+      options: { emailRedirectTo: `${appUrl}/auth/callback` },
     })
     if (error) {
       setError(error.message)

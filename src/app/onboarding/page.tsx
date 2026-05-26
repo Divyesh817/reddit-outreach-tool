@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, KeyboardEvent } from 'react'
+import { useState, useEffect, useRef, KeyboardEvent } from 'react'
 import './onboarding.css'
 
-type Step = '1' | '1b' | '2' | '3' | '4'
+type Step = '1' | '1b' | '2' | '3' | '4' | '4b'
 type CheckState = 'pending' | 'active' | 'done'
 
 interface Checks {
@@ -45,6 +45,8 @@ export default function OnboardingPage() {
 
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState('')
+  const [scanLeadsFound, setScanLeadsFound] = useState(0)
+  const scanTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   function setCheck(key: keyof Checks, val: CheckState) {
     setChecks(p => ({ ...p, [key]: val }))
@@ -157,12 +159,31 @@ export default function OnboardingPage() {
         const body = await r.json().catch(() => ({}))
         throw new Error(body.error || `Error ${r.status}`)
       }
-      window.location.href = '/dashboard'
+      // Product saved — now run the initial scan to find leads
+      setCreating(false)
+      setStep('4b')
+      runInitialScan()
     } catch (e: any) {
       setCreating(false)
       setCreateError(e.message || 'Something went wrong')
     }
   }
+
+  async function runInitialScan() {
+    try {
+      const r = await fetch('/api/scan', { method: 'POST' })
+      const data = await r.json().catch(() => ({}))
+      setScanLeadsFound(data.totalCreated ?? 0)
+    } catch { /* non-fatal — user lands on dashboard anyway */ }
+    // Auto-navigate to dashboard after scan finishes (or fails)
+    scanTimerRef.current = setTimeout(() => {
+      window.location.href = '/dashboard'
+    }, 1800)
+  }
+
+  useEffect(() => {
+    return () => { if (scanTimerRef.current) clearTimeout(scanTimerRef.current) }
+  }, [])
 
   const stepNum = step === '1' || step === '1b' ? 1 : step === '2' ? 2 : step === '3' ? 3 : 4
   const STEPS = [
@@ -361,8 +382,56 @@ export default function OnboardingPage() {
                     <button className="ob-btn ob-btn-ghost" onClick={() => setStep('3')}>← Back</button>
                     <button className="ob-btn ob-btn-primary" onClick={handleComplete} disabled={creating}>
                       {creating
-                        ? <><span className="ob-inline-spinner" /> Setting up…</>
-                        : <>Open dashboard <span className="ob-arr">→</span></>}
+                        ? <><span className="ob-inline-spinner" /> Saving…</>
+                        : <>Find my leads <span className="ob-arr">→</span></>}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {step === '4b' && (
+                <>
+                  <div className="ob-eyebrow" style={{ color: '#3FB07A' }}>
+                    Scanning now <span className="ob-eyebrow-dim" style={{ color: '#8B8175' }}>· Almost there</span>
+                  </div>
+                  <h1 className="ob-title">Hunting for <em>warm leads.</em></h1>
+                  <p className="ob-lead">
+                    Claude is scanning Reddit right now — reading posts and comment threads in your subreddits, scoring intent, and drafting replies for the best matches.
+                  </p>
+                  <div className="ob-field">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
+                      {[
+                        { label: 'Fetching recent posts & comment threads', done: true },
+                        { label: 'Scoring intent with Claude AI', done: scanLeadsFound > 0 },
+                        { label: 'Drafting replies for high-intent threads', done: scanLeadsFound > 0 },
+                      ].map((item, i) => (
+                        <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 13.5, color: item.done ? '#C9BFAE' : '#5E544A' }}>
+                          <span style={{
+                            width: 20, height: 20, borderRadius: '50%', display: 'inline-flex',
+                            alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                            background: item.done ? 'rgba(63,176,122,.15)' : 'rgba(255,255,255,.04)',
+                            border: `1px solid ${item.done ? 'rgba(63,176,122,.4)' : 'rgba(255,255,255,.08)'}`,
+                            fontSize: 10,
+                          }}>
+                            {item.done ? <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#3FB07A" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg> : <span className="ob-dot-pulse" style={{ width: 6, height: 6 }} />}
+                          </span>
+                          {item.label}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{ marginTop: 20, padding: '14px 18px', borderRadius: 10, background: 'rgba(63,176,122,.08)', border: '1px solid rgba(63,176,122,.2)', display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span className="ob-dot-pulse" style={{ flexShrink: 0 }} />
+                    <span style={{ fontSize: 13.5, color: '#3FB07A', fontWeight: 600 }}>
+                      {scanLeadsFound > 0
+                        ? `Found ${scanLeadsFound} lead${scanLeadsFound !== 1 ? 's' : ''} — taking you to your inbox…`
+                        : 'Scanning your subreddits for fresh intent signals…'}
+                    </span>
+                  </div>
+                  <div className="ob-actions" style={{ marginTop: 24 }}>
+                    <span style={{ fontSize: 13, color: '#5E544A' }}>Taking you to dashboard automatically</span>
+                    <button className="ob-btn ob-btn-primary" onClick={() => { window.location.href = '/dashboard' }}>
+                      Go now <span className="ob-arr">→</span>
                     </button>
                   </div>
                 </>
@@ -383,8 +452,8 @@ export default function OnboardingPage() {
                   onAdd={addKeyword}
                 />
               )}
-              {step === '4' && (
-                <ReadyPanel selectedCount={selectedSubs.size} kwCount={keywords.length} productName={profile?.name} />
+              {(step === '4' || step === '4b') && (
+                <ReadyPanel selectedCount={selectedSubs.size} kwCount={keywords.length} productName={profile?.name} scanning={step === '4b'} leadsFound={scanLeadsFound} />
               )}
             </div>
           </div>
@@ -583,11 +652,11 @@ function KeywordPanel({ suggestions, currentKeywords, onAdd }: {
 
 // ─── Ready panel (Step 4 right panel) ────────────────────────────────────────
 
-function ReadyPanel({ selectedCount, kwCount, productName }: { selectedCount: number; kwCount: number; productName?: string }) {
+function ReadyPanel({ selectedCount, kwCount, productName, scanning = false, leadsFound = 0 }: { selectedCount: number; kwCount: number; productName?: string; scanning?: boolean; leadsFound?: number }) {
   return (
     <div>
       <div className="ob-ready-head">
-        <span className="ob-ready-lbl">First match · <span style={{ color: '#FF7849' }}>scanning now</span></span>
+        <span className="ob-ready-lbl">First match · <span style={{ color: scanning ? '#3FB07A' : '#FF7849' }}>{scanning ? 'live scan running' : 'scanning now'}</span></span>
         <span className="ob-live-badge"><span className="ob-live-dot" />Live</span>
       </div>
       <div className="ob-preview-thread">
@@ -619,21 +688,25 @@ function ReadyPanel({ selectedCount, kwCount, productName }: { selectedCount: nu
           <div className="ob-sum-delta">Tracked</div>
         </div>
         <div className="ob-sum">
-          <div className="ob-sum-lbl">Intent</div>
-          <div className="ob-sum-val">91<span style={{ fontSize: 14, color: '#8B8175', fontWeight: 500 }}>%</span></div>
-          <div className="ob-sum-delta">First match</div>
+          <div className="ob-sum-lbl">{scanning ? 'Leads found' : 'Intent'}</div>
+          <div className="ob-sum-val">{scanning ? leadsFound : <>91<span style={{ fontSize: 14, color: '#8B8175', fontWeight: 500 }}>%</span></>}</div>
+          <div className="ob-sum-delta">{scanning ? 'So far' : 'First match'}</div>
         </div>
       </div>
 
-      <div className="ob-ready-success">
-        <div className="ob-ready-ic">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
-            <polyline points="20 6 9 17 4 12"/>
-          </svg>
+      <div className="ob-ready-success" style={scanning ? { borderColor: 'rgba(63,176,122,.25)', background: 'rgba(63,176,122,.06)' } : {}}>
+        <div className="ob-ready-ic" style={scanning ? { background: 'rgba(63,176,122,.15)', borderColor: 'rgba(63,176,122,.3)' } : {}}>
+          {scanning
+            ? <span className="ob-dot-pulse" style={{ width: 8, height: 8 }} />
+            : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><polyline points="20 6 9 17 4 12"/></svg>}
         </div>
         <div>
-          <div className="ob-ready-title">Workspace is live</div>
-          <div className="ob-ready-sub">Open the dashboard to see your first AI-drafted reply{productName ? ` for ${productName}` : ''}.</div>
+          <div className="ob-ready-title">{scanning ? 'Scan in progress' : 'Workspace is live'}</div>
+          <div className="ob-ready-sub">
+            {scanning
+              ? `Claude is reading Reddit threads and scoring intent${productName ? ` for ${productName}` : ''}…`
+              : `Open the dashboard to see your first AI-drafted reply${productName ? ` for ${productName}` : ''}.`}
+          </div>
         </div>
       </div>
     </div>

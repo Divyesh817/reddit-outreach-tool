@@ -1,10 +1,39 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { PAIN_TYPE_LABELS, type PainType } from '@/types'
 import { S } from '@/lib/theme'
+import { PAIN_TYPE_LABELS, type PainType } from '@/types'
 
+// Pain type chip styles — use theme CSS vars for structural colors
+const PAIN_STYLE: Record<PainType, { text: string; bg: string; label: string }> = {
+  workflow_pain:          { text: S.purple,  bg: S.purpleSoft, label: 'Workflow pain' },
+  competitor_frustration: { text: S.red,     bg: S.redSoft,    label: 'Competitor pain' },
+  switching_intent:       { text: S.orange2, bg: S.orangeSoft, label: 'Switching intent' },
+  active_tool_search:     { text: S.blue,    bg: S.blueSoft,   label: 'Tool search' },
+  roi_frustration:        { text: S.amber,   bg: S.amberSoft,  label: 'ROI frustration' },
+}
+
+const PAIN_PERSONA: Record<PainType, string> = {
+  workflow_pain:          'Workflow challenge',
+  competitor_frustration: 'Competitor unhappy',
+  switching_intent:       'Actively switching',
+  active_tool_search:     'Seeking solution',
+  roi_frustration:        'ROI challenge',
+}
+
+function timeAgo(date: string) {
+  const h = Math.floor((Date.now() - new Date(date).getTime()) / 3600000)
+  if (h < 1) return 'just now'
+  if (h < 24) return `${h}h ago`
+  return `${Math.floor(h / 24)}d ago`
+}
+
+function wordCount(text: string) {
+  return text.trim().split(/\s+/).filter(Boolean).length
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Reply {
   id: string
@@ -28,76 +57,212 @@ interface Opportunity {
   shouldPitch: boolean
   scoringReasoning: string | null
   status: string
-  subreddit: { name: string }
+  subreddit: { name: string; allowsPromotion: boolean; rulesScannedAt: string | null }
   replies: Reply[]
   product: { id: string; name: string }
 }
 
-const PAIN_COLORS: Record<PainType, { text: string; bg: string }> = {
-  switching_intent: { text: S.red, bg: S.redSoft },
-  competitor_frustration: { text: S.orange, bg: S.orangeSoft },
-  active_tool_search: { text: S.blue, bg: S.blueSoft },
-  roi_frustration: { text: S.amber, bg: S.amberSoft },
-  workflow_pain: { text: S.purple, bg: S.purpleSoft },
+interface Props {
+  opportunities: Opportunity[]
+  initialStatus: string
+  productName: string
+  counts: { queued: number; posted: number; skipped: number }
 }
 
-const STATUS_TABS = [
-  { key: 'QUEUED', label: 'New' },
-  { key: 'POSTED', label: 'Done' },
-  { key: 'SKIPPED', label: 'Dismissed' },
-]
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
-function timeAgo(date: string) {
-  const h = Math.floor((Date.now() - new Date(date).getTime()) / 3600000)
-  if (h < 1) return 'just now'
-  if (h < 24) return `${h}h ago`
-  return `${Math.floor(h / 24)}d ago`
+const icBtn: React.CSSProperties = {
+  width: 32, height: 32, borderRadius: 7, display: 'flex', alignItems: 'center',
+  justifyContent: 'center', color: S.text3, background: 'none', border: 'none',
+  cursor: 'pointer', transition: 'all .15s', flexShrink: 0,
 }
 
-function IntentBadge({ score }: { score: number }) {
-  const color = score >= 80 ? S.green : score >= 60 ? S.amber : S.text4
-  const bg = score >= 80 ? S.greenSoft : score >= 60 ? S.amberSoft : 'rgba(94,84,74,.15)'
+function SectionHead({ left, right }: { left: React.ReactNode; right?: React.ReactNode }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      fontFamily: 'JetBrains Mono, monospace', fontSize: 12,
+      letterSpacing: '.12em', textTransform: 'uppercase', color: S.text3, fontWeight: 600,
+    }}>
+      <span>{left}</span>
+      <span style={{ flex: 1, height: 1, background: S.line }} />
+      {right && <span style={{ color: S.text3, fontWeight: 500, letterSpacing: '.06em', fontSize: 12 }}>{right}</span>}
+    </div>
+  )
+}
+
+function SignalChip({ icon, text, match }: { icon: React.ReactNode; text: React.ReactNode; match?: boolean }) {
   return (
     <span style={{
-      fontSize: 13, fontWeight: 700, padding: '2px 7px', borderRadius: 99,
-      color, background: bg, fontFamily: 'JetBrains Mono, monospace',
-      border: `1px solid ${color}33`,
+      display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 11px',
+      borderRadius: 7, background: S.card,
+      border: `1px solid ${match ? S.orangeLine : S.line}`,
+      fontSize: 13.5, color: match ? S.orange2 : S.text2,
     }}>
-      {score}
+      <span style={{ width: 14, height: 14, color: match ? S.orange : S.text3, display: 'flex', flexShrink: 0 }}>
+        {icon}
+      </span>
+      {text}
     </span>
   )
 }
 
-export function InboxView({
-  opportunities: initial,
-  total,
-  currentStatus,
-  productName,
-}: {
-  opportunities: Opportunity[]
-  total: number
-  currentStatus: string
-  productName: string
-}) {
+// ─── Main component ───────────────────────────────────────────────────────────
+
+// CSS string extracted to avoid dangerouslySetInnerHTML needing dynamic interp — injected once
+const INBOX_CSS = `
+  @keyframes ib-spin { from { transform:rotate(0deg) } to { transform:rotate(360deg) } }
+  .ib-spin { animation: ib-spin 1s linear infinite }
+  .ib-thread:hover { background: var(--c-card-hover) !important; }
+  .ib-icbtn:hover  { background: rgba(128,100,70,.12) !important; color: var(--c-text) !important; }
+  .ib-danger:hover { background: var(--c-red-soft) !important; color: var(--c-red) !important; }
+  .ib-scroll::-webkit-scrollbar { width:6px }
+  .ib-scroll::-webkit-scrollbar-thumb { background:var(--c-line3); border-radius:999px }
+  .ib-post-fade::after {
+    content:''; position:absolute; left:0; right:0; bottom:0; height:52px;
+    background:linear-gradient(transparent,var(--c-card)); pointer-events:none;
+  }
+  .ib-post-fade.expanded::after { display:none }
+  .ib-expand:hover  { color:var(--c-orange2) !important }
+  .ib-btn-ghost:hover { background:var(--c-card-hover) !important; border-color:var(--c-line2) !important }
+  .ib-open:hover svg { color:var(--c-orange2) }
+`
+
+export function InboxView({ opportunities: initial, initialStatus, productName, counts: initialCounts }: Props) {
   const router = useRouter()
-  const [opps, setOpps] = useState(initial)
-  const [painFilter, setPainFilter] = useState<PainType | 'all'>('all')
-  const [selected, setSelected] = useState<Opportunity | null>(initial[0] ?? null)
+
+  const [allOpps, setAllOpps] = useState(initial)
+  const [activeStatus, setActiveStatus] = useState(initialStatus)
+  const [search, setSearch] = useState('')
+  const [scanning, setScanning] = useState(false)
+  const [scanMsg, setScanMsg] = useState('')
+  const [comments, setComments] = useState<{ author: string; body: string; score: number }[] | null>(null)
+  const [commentsLoading, setCommentsLoading] = useState(false)
+  const [commentsError, setCommentsError] = useState('')
+  const [commentReplies, setCommentReplies] = useState<Record<number, { text: string; whyThisWorks: string; loading: boolean; copied: boolean }>>({})
+
+  async function generateCommentReply(commentIndex: number, comment: { author: string; body: string }) {
+    if (!selected) return
+    setCommentReplies(prev => ({ ...prev, [commentIndex]: { text: '', whyThisWorks: '', loading: true, copied: false } }))
+    try {
+      const res = await fetch(`/api/opportunities/${selected.id}/reply-to-comment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commentBody: comment.body, commentAuthor: comment.author }),
+      })
+      const data = await res.json()
+      setCommentReplies(prev => ({ ...prev, [commentIndex]: { text: data.text ?? '', whyThisWorks: data.whyThisWorks ?? '', loading: false, copied: false } }))
+    } catch {
+      setCommentReplies(prev => ({ ...prev, [commentIndex]: { text: '', whyThisWorks: '', loading: false, copied: false } }))
+    }
+  }
+
+  async function copyCommentReply(commentIndex: number, text: string) {
+    await navigator.clipboard.writeText(text)
+    setCommentReplies(prev => ({ ...prev, [commentIndex]: { ...prev[commentIndex], copied: true } }))
+    setTimeout(() => setCommentReplies(prev => ({ ...prev, [commentIndex]: { ...prev[commentIndex], copied: false } })), 2000)
+  }
+
+  // Derive opps + counts from allOpps to keep everything in sync after actions
+  const opps = allOpps.filter(o => o.status === activeStatus)
+  const counts = {
+    queued:  allOpps.filter(o => o.status === 'QUEUED').length,
+    posted:  allOpps.filter(o => o.status === 'POSTED').length,
+    skipped: allOpps.filter(o => o.status === 'SKIPPED').length,
+  }
+
+  const [selected, setSelected] = useState<Opportunity | null>(
+    initial.filter(o => o.status === initialStatus)[0] ?? null
+  )
   const [replyText, setReplyText] = useState(initial[0]?.replies[0]?.text ?? '')
+  const [editMode, setEditMode] = useState(false)
+  const [postExpanded, setPostExpanded] = useState(false)
   const [loading, setLoading] = useState<'done' | 'skip' | 'regen' | null>(null)
   const [copied, setCopied] = useState(false)
-  const [scanning, setScanning] = useState(false)
+  // null = follow shouldPitch from DB; true/false = user override
+  const [includePitch, setIncludePitch] = useState<boolean | null>(null)
+  const detailRef = useRef<HTMLDivElement>(null)
 
-  const filteredOpps = painFilter === 'all' ? opps : opps.filter(o => o.painType === painFilter)
+  const effectivePitch = includePitch !== null ? includePitch : (selected?.shouldPitch ?? false)
+
+  const filtered = search
+    ? opps.filter(o =>
+        o.redditPostTitle.toLowerCase().includes(search.toLowerCase()) ||
+        o.subreddit.name.toLowerCase().includes(search.toLowerCase()) ||
+        o.redditAuthor.toLowerCase().includes(search.toLowerCase())
+      )
+    : opps
+
+  const tabCounts: Record<string, number> = {
+    QUEUED: counts.queued,
+    POSTED: counts.posted,
+    SKIPPED: counts.skipped,
+  }
+
+  const selectedIndex = filtered.findIndex(o => o.id === selected?.id)
+  const reply = selected?.replies[0] ?? null
+
+  // Keep handlers in a ref so keyboard listener never goes stale
+  const h = useRef({ handleMarkDone, handleCopy, handleSkip, navigateRelative })
+  useEffect(() => { h.current = { handleMarkDone, handleCopy, handleSkip, navigateRelative } })
+
+  // Fetch comments for the initially selected thread on mount
+  useEffect(() => {
+    if (selected?.redditPostUrl) fetchComments(selected.redditPostUrl)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const tgt = e.target as HTMLElement
+      if (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA') return
+      if (e.key === 'e' || e.key === 'E') h.current.handleMarkDone()
+      if (e.key === 'x' || e.key === 'X') h.current.handleSkip()
+      if ((e.metaKey || e.ctrlKey) && e.key === 'c') { e.preventDefault(); h.current.handleCopy() }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'o') { e.preventDefault(); if (selected) window.open(selected.redditPostUrl, '_blank') }
+      if (e.key === 'ArrowDown') h.current.navigateRelative(1)
+      if (e.key === 'ArrowUp')   h.current.navigateRelative(-1)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selected])
 
   function selectOpp(opp: Opportunity) {
     setSelected(opp)
     setReplyText(opp.replies[0]?.text ?? '')
+    setEditMode(false)
+    setPostExpanded(false)
     setCopied(false)
+    setIncludePitch(null)
+    setComments(null)
+    setCommentsError('')
+    setCommentReplies({})
+    detailRef.current?.scrollTo(0, 0)
+    fetchComments(opp.redditPostUrl)
   }
 
-  function switchTab(status: string) {
-    router.push(`/opportunities?status=${status}`)
+  async function fetchComments(url: string) {
+    setCommentsLoading(true)
+    setCommentsError('')
+    try {
+      const res = await fetch(`/api/reddit/comments?url=${encodeURIComponent(url)}`)
+      const data = await res.json()
+      if (data.error && !data.comments?.length) {
+        setCommentsError(data.error)
+        setComments([])
+      } else {
+        setComments(data.comments ?? [])
+      }
+    } catch (e: any) {
+      setCommentsError(e.message ?? 'Failed to load comments')
+      setComments([])
+    }
+    setCommentsLoading(false)
+  }
+
+  function navigateRelative(delta: number) {
+    const next = filtered[selectedIndex + delta]
+    if (next) selectOpp(next)
   }
 
   async function handleCopy() {
@@ -108,465 +273,682 @@ export function InboxView({
   }
 
   async function handleMarkDone() {
-    if (!selected) return
+    if (!selected || loading) return
     setLoading('done')
     await fetch(`/api/opportunities/${selected.id}/approve`, { method: 'POST' })
-    const next = opps.filter(o => o.id !== selected.id)
-    setOpps(next)
-    setSelected(next[0] ?? null)
-    setReplyText(next[0]?.replies[0]?.text ?? '')
-    setCopied(false)
+    // Transition status client-side — no router.refresh needed
+    setAllOpps(prev => prev.map(o => o.id === selected.id ? { ...o, status: 'POSTED' } : o))
+    const nextInQueue = opps.filter(o => o.id !== selected.id)[0] ?? null
+    setSelected(nextInQueue); setReplyText(nextInQueue?.replies[0]?.text ?? ''); setCopied(false)
     setLoading(null)
   }
 
   async function handleSkip() {
-    if (!selected) return
+    if (!selected || loading) return
     setLoading('skip')
     await fetch(`/api/opportunities/${selected.id}/skip`, { method: 'POST' })
-    const next = opps.filter(o => o.id !== selected.id)
-    setOpps(next)
-    setSelected(next[0] ?? null)
-    setReplyText(next[0]?.replies[0]?.text ?? '')
-    setCopied(false)
+    setAllOpps(prev => prev.map(o => o.id === selected.id ? { ...o, status: 'SKIPPED' } : o))
+    const nextInQueue = opps.filter(o => o.id !== selected.id)[0] ?? null
+    setSelected(nextInQueue); setReplyText(nextInQueue?.replies[0]?.text ?? ''); setCopied(false)
     setLoading(null)
   }
 
-  async function handleRegen() {
-    if (!selected) return
+  async function handleRegen(pitchOverride?: boolean) {
+    if (!selected || loading) return
     setLoading('regen')
-    const res = await fetch(`/api/opportunities/${selected.id}/regenerate`, { method: 'POST' })
+    const body: Record<string, unknown> = {}
+    // Use explicit override if passed, otherwise fall back to current toggle state
+    const pitch = pitchOverride !== undefined ? pitchOverride : (includePitch !== null ? includePitch : undefined)
+    if (pitch !== undefined) body.includePitch = pitch
+    const res = await fetch(`/api/opportunities/${selected.id}/regenerate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
     if (res.ok) {
       const { data } = await res.json()
-      const newReply: Reply = { id: data.id, text: data.text, toneUsed: data.toneUsed, whyThisWorks: data.whyThisWorks, version: data.version }
-      setReplyText(data.text)
-      setCopied(false)
-      setSelected(s => s ? { ...s, replies: [newReply] } : s)
-      setOpps(os => os.map(o => o.id === selected.id ? { ...o, replies: [newReply] } : o))
+      const nr: Reply = { id: data.id, text: data.text, toneUsed: data.toneUsed, whyThisWorks: data.whyThisWorks, version: data.version }
+      setReplyText(data.text); setCopied(false); setEditMode(false)
+      setSelected(s => s ? { ...s, replies: [nr] } : s)
+      setAllOpps(os => os.map(o => o.id === selected.id ? { ...o, replies: [nr] } : o))
     }
     setLoading(null)
   }
 
   async function handleScan() {
-    setScanning(true)
-    await fetch('/api/scan', { method: 'POST' }).catch(() => null)
-    setTimeout(() => {
-      setScanning(false)
-      router.refresh()
-    }, 1500)
+    setScanning(true); setScanMsg('')
+    try {
+      const r = await fetch('/api/scan', { method: 'POST' })
+      const data = await r.json().catch(() => ({}))
+      const n = data.totalCreated ?? 0
+      setScanMsg(n > 0 ? `${n} new lead${n !== 1 ? 's' : ''} found` : 'No new leads')
+      setTimeout(() => setScanMsg(''), 5000)
+      // Refresh server data to pick up new leads — only after scan completes
+      if (n > 0) router.refresh()
+    } catch {
+      setScanMsg('Scan failed'); setTimeout(() => setScanMsg(''), 4000)
+    }
+    setScanning(false)
   }
 
-  const reply = selected?.replies[0]
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: S.bg }}>
+    <>
+      {/* dangerouslySetInnerHTML prevents React from HTML-escaping CSS content quotes */}
+      <style dangerouslySetInnerHTML={{ __html: INBOX_CSS }} />
 
-      {/* Toolbar */}
-      <div style={{
-        padding: '14px 24px', borderBottom: `1px solid ${S.line2}`,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        background: S.panel, flexShrink: 0,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: S.text, margin: 0, letterSpacing: '-.02em' }}>
-            Inbox
-          </h1>
-          <span style={{
-            fontSize: 14, color: S.text3, background: S.panel2, padding: '2px 10px',
-            borderRadius: 20, fontWeight: 600, border: `1px solid ${S.line2}`,
-            fontFamily: 'JetBrains Mono, monospace',
-          }}>
-            {productName}
-          </span>
-        </div>
-        <button
-          onClick={handleScan}
-          disabled={scanning}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 7, padding: '8px 16px',
-            background: scanning ? S.panel2 : S.orange,
-            color: scanning ? S.text3 : '#fff', border: 'none',
-            borderRadius: 8, fontSize: 15, fontWeight: 700,
-            cursor: scanning ? 'not-allowed' : 'pointer',
-            fontFamily: 'inherit', transition: 'background .12s',
-          }}
-        >
-          <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
-          </svg>
-          {scanning ? 'Scanning…' : 'Scan now'}
-        </button>
-      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', height: '100%', background: S.bg, overflow: 'hidden' }}>
 
-      {/* Tabs */}
-      <div style={{
-        display: 'flex', borderBottom: `1px solid ${S.line2}`,
-        background: S.panel, padding: '0 24px', flexShrink: 0,
-      }}>
-        {STATUS_TABS.map(tab => {
-          const active = currentStatus === tab.key
-          return (
+        {/* ── LIST PANEL ──────────────────────────────────────────────── */}
+        <div style={{ background: S.panel2, borderRight: `1px solid ${S.line}`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+          {/* List header */}
+          <div style={{ padding: '18px 18px 12px', borderBottom: `1px solid ${S.line}`, background: S.panel2, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+            {/* Title */}
+            <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: '-.015em', color: S.text }}>Inbox</h2>
+
+            {/* Hero scan button */}
             <button
-              key={tab.key}
-              onClick={() => switchTab(tab.key)}
+              onClick={handleScan}
+              disabled={scanning}
               style={{
-                padding: '10px 0', marginRight: 22, fontSize: 15, fontWeight: 600,
-                color: active ? S.orange : S.text3, background: 'none', border: 'none',
-                borderBottom: active ? `2px solid ${S.orange}` : '2px solid transparent',
-                cursor: 'pointer', fontFamily: 'inherit', marginBottom: -1,
-                transition: 'color .12s',
+                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                gap: 9, padding: '11px 16px', borderRadius: 10, cursor: scanning ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit', fontSize: 15, fontWeight: 700, letterSpacing: '-.01em',
+                background: scanning
+                  ? S.orangeSoft
+                  : `linear-gradient(135deg, ${S.orange} 0%, #E54B1B 100%)`,
+                color: scanning ? S.orange2 : '#fff',
+                border: `1px solid ${scanning ? S.orangeLine : 'transparent'}`,
+                boxShadow: scanning ? 'none' : 'inset 0 -2px 0 rgba(0,0,0,.2), 0 4px 14px rgba(255,87,34,.35)',
+                transition: 'all .15s',
               }}
             >
-              {tab.label}
-              {tab.key === 'QUEUED' && total > 0 && (
-                <span style={{
-                  marginLeft: 6, background: S.orange, color: '#fff',
-                  fontSize: 12, fontWeight: 800, borderRadius: 10, padding: '1px 5px',
-                  fontFamily: 'JetBrains Mono, monospace',
-                }}>
-                  {total}
-                </span>
-              )}
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+                className={scanning ? 'ib-spin' : undefined} style={{ flexShrink: 0 }}>
+                <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+              {scanning ? 'Scanning Reddit…' : 'Scan for leads'}
             </button>
-          )
-        })}
-      </div>
 
-      {/* Pain-type filter chips */}
-      {currentStatus === 'QUEUED' && opps.length > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 6, padding: '8px 24px',
-          background: S.panel, borderBottom: `1px solid ${S.line}`, flexShrink: 0,
-          overflowX: 'auto',
-        }}>
-          {([
-            { key: 'all',                    label: 'All' },
-            { key: 'competitor_frustration', label: 'Competitor' },
-            { key: 'switching_intent',       label: 'Switching' },
-            { key: 'active_tool_search',     label: 'Tool search' },
-            { key: 'roi_frustration',        label: 'ROI pain' },
-            { key: 'workflow_pain',          label: 'Workflow' },
-          ] as { key: PainType | 'all'; label: string }[]).map(f => {
-            const active = painFilter === f.key
-            const pain = f.key !== 'all' ? PAIN_COLORS[f.key] : null
-            const count = f.key === 'all' ? opps.length : opps.filter(o => o.painType === f.key).length
-            if (f.key !== 'all' && count === 0) return null
-            return (
-              <button
-                key={f.key}
-                onClick={() => {
-                  setPainFilter(f.key)
-                  const first = f.key === 'all' ? opps[0] : opps.find(o => o.painType === f.key) ?? null
-                  if (first) { setSelected(first); setReplyText(first.replies[0]?.text ?? ''); setCopied(false) }
-                }}
-                style={{
-                  padding: '4px 11px', borderRadius: 99, fontSize: 12, fontWeight: 600,
-                  border: `1px solid ${active ? (pain?.text ?? S.orange) : S.line2}`,
-                  background: active ? (pain ? pain.bg : S.orangeSoft) : 'transparent',
-                  color: active ? (pain?.text ?? S.orange) : S.text3,
-                  cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-                  transition: 'all .12s', display: 'flex', alignItems: 'center', gap: 5,
-                }}
-              >
-                {f.label}
-                <span style={{
-                  fontSize: 10, fontWeight: 700, fontFamily: 'JetBrains Mono, monospace',
-                  color: active ? 'inherit' : S.text4,
-                }}>
-                  {count}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Split panel */}
-      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-
-        {/* Left list */}
-        <div style={{
-          width: 340, flexShrink: 0, borderRight: `1px solid ${S.line2}`,
-          overflowY: 'auto', background: S.panel,
-        }}>
-          {filteredOpps.length === 0 ? (
-            <div style={{ padding: 48, textAlign: 'center' }}>
+            {/* Scan result pill */}
+            {scanMsg && (
               <div style={{
-                width: 48, height: 48, borderRadius: 12, background: S.panel2,
-                border: `1px solid ${S.line2}`, display: 'flex', alignItems: 'center',
-                justifyContent: 'center', margin: '0 auto 14px',
+                fontSize: 13, fontWeight: 600, padding: '5px 10px', borderRadius: 6,
+                background: scanMsg.includes('found') ? S.greenSoft : S.orangeSoft,
+                color:      scanMsg.includes('found') ? S.green     : S.orange2,
+                border:     `1px solid ${scanMsg.includes('found') ? S.greenLine : S.orangeLine}`,
+                fontFamily: 'JetBrains Mono, monospace',
               }}>
-                <svg width="22" height="22" fill="none" stroke={S.text4} strokeWidth="1.5" viewBox="0 0 24 24">
-                  <rect x="2" y="4" width="20" height="16" rx="2.5"/>
-                  <path d="M2 8l10 7 10-7"/>
-                </svg>
+                {scanMsg}
               </div>
-              <p style={{ fontSize: 16, fontWeight: 600, color: S.text3, margin: '0 0 6px' }}>
-                {currentStatus === 'QUEUED' ? 'Inbox empty' : 'Nothing here yet'}
-              </p>
-              {currentStatus === 'QUEUED' && (
-                <p style={{ fontSize: 15, color: S.text4, lineHeight: 1.5 }}>
-                  Hit "Scan now" to find new threads.
-                </p>
+            )}
+
+            {/* Status tabs */}
+            <div style={{ display: 'inline-flex', background: S.card, border: `1px solid ${S.line}`, borderRadius: 8, padding: 3, gap: 2 }}>
+              {([
+                { key: 'QUEUED',  label: 'New' },
+                { key: 'POSTED',  label: 'Done' },
+                { key: 'SKIPPED', label: 'Dismissed' },
+              ] as const).map(tab => {
+                const active = activeStatus === tab.key
+                return (
+                  <button key={tab.key} onClick={() => {
+                    setActiveStatus(tab.key)
+                    setSelected(allOpps.filter(o => o.status === tab.key)[0] ?? null)
+                    setSearch('')
+                  }} style={{
+                    padding: '7px 12px', fontSize: 14, borderRadius: 6, fontWeight: 500,
+                    color: active ? S.text : S.text3,
+                    background: active ? S.cardHover : 'transparent',
+                    border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                    display: 'inline-flex', alignItems: 'center', gap: 6, transition: 'all .12s',
+                  }}>
+                    {tab.label}
+                    <span style={{
+                      fontFamily: 'JetBrains Mono, monospace', fontSize: 12,
+                      padding: '2px 6px', borderRadius: 4,
+                      background: active ? S.orangeSoft : S.line,
+                      color:      active ? S.orange2    : S.text3,
+                    }}>
+                      {tabCounts[tab.key] ?? 0}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Search */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: S.card, border: `1px solid ${S.line}`, borderRadius: 8 }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: S.text3, flexShrink: 0 }}>
+                <circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>
+              </svg>
+              <input
+                placeholder="Search threads…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                style={{ flex: 1, fontSize: 15, background: 'transparent', border: 'none', color: S.text, outline: 'none', fontFamily: 'inherit' }}
+              />
+              {search && (
+                <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', color: S.text4, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
               )}
             </div>
-          ) : filteredOpps.map(opp => {
-            const isSelected = selected?.id === opp.id
-            const pain = PAIN_COLORS[opp.painType]
-            return (
-              <button
-                key={opp.id}
-                onClick={() => selectOpp(opp)}
-                style={{
-                  width: '100%', textAlign: 'left', padding: '13px 18px',
-                  background: isSelected ? S.panel2 : 'transparent',
-                  border: 'none', borderBottom: `1px solid ${S.line}`,
-                  cursor: 'pointer', fontFamily: 'inherit',
-                  borderLeft: isSelected ? `2px solid ${S.orange}` : `2px solid transparent`,
-                  transition: 'background .1s',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
-                  <span style={{
-                    fontSize: 12, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
-                    color: pain.text, background: pain.bg,
-                    textTransform: 'uppercase', letterSpacing: '.04em',
-                    fontFamily: 'JetBrains Mono, monospace', flexShrink: 0,
-                  }}>
-                    {PAIN_TYPE_LABELS[opp.painType]}
-                  </span>
-                  <IntentBadge score={opp.intentScore} />
-                  <span style={{ fontSize: 13, color: S.text4, marginLeft: 'auto', flexShrink: 0, fontFamily: 'JetBrains Mono, monospace' }}>
-                    {timeAgo(opp.redditPostedAt)}
-                  </span>
+          </div>
+
+          {/* Thread list */}
+          <div className="ib-scroll" style={{ flex: 1, overflowY: 'auto' }}>
+            {filtered.length === 0 ? (
+              <div style={{ padding: '48px 24px', textAlign: 'center' }}>
+                <div style={{ width: 44, height: 44, borderRadius: 11, background: S.card, border: `1px solid ${S.line2}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: S.text4 }}><path d="M3 7l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
                 </div>
-                <p style={{
-                  fontSize: 15, fontWeight: 600, color: S.text, margin: 0, lineHeight: 1.4,
-                  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-                }}>
-                  {opp.redditPostTitle}
+                <p style={{ fontSize: 17, fontWeight: 600, color: S.text3, margin: '0 0 6px' }}>
+                  {search ? 'No matches' : activeStatus === 'QUEUED' ? 'Inbox empty' : 'Nothing here'}
                 </p>
-                <p style={{ fontSize: 13, color: S.text4, marginTop: 5, fontFamily: 'JetBrains Mono, monospace' }}>
-                  r/{opp.subreddit.name} · u/{opp.redditAuthor}
-                </p>
-              </button>
-            )
-          })}
+                {!search && activeStatus === 'QUEUED' && (
+                  <p style={{ fontSize: 15, color: S.text4, margin: 0 }}>Hit the refresh button to scan for new leads.</p>
+                )}
+              </div>
+            ) : filtered.map(opp => {
+              const isActive = selected?.id === opp.id
+              const pain = PAIN_STYLE[opp.painType]
+              return (
+                <div
+                  key={opp.id}
+                  className="ib-thread"
+                  onClick={() => selectOpp(opp)}
+                  style={{
+                    display: 'flex', flexDirection: 'column', gap: 8,
+                    padding: '14px 18px', borderBottom: `1px solid ${S.line}`,
+                    cursor: 'pointer', transition: 'background .15s',
+                    background: isActive ? S.card : 'transparent',
+                    borderLeft: `2px solid ${isActive ? S.orange : 'transparent'}`,
+                    paddingLeft: isActive ? 16 : 18,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{
+                      fontFamily: 'JetBrains Mono, monospace', fontSize: 11, padding: '3px 8px',
+                      borderRadius: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em',
+                      color: pain.text, background: pain.bg, flexShrink: 0,
+                    }}>
+                      {pain.label}
+                    </span>
+                    <span style={{
+                      marginLeft: 'auto', fontFamily: 'JetBrains Mono, monospace',
+                      fontSize: 12, fontWeight: 700, padding: '3px 8px', borderRadius: 4,
+                      background: opp.intentScore >= 80 ? S.orange : S.orangeSoft,
+                      color: opp.intentScore >= 80 ? '#fff' : S.orange2,
+                    }}>
+                      {opp.intentScore}
+                    </span>
+                  </div>
+                  <div style={{
+                    fontSize: 16, fontWeight: 600, color: S.text, lineHeight: 1.35,
+                    display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                  } as React.CSSProperties}>
+                    {opp.redditPostTitle}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: S.text3 }}>
+                    <span style={{ color: S.text2, fontWeight: 500 }}>r/{opp.subreddit.name}</span>
+                    <Dot />
+                    <span>u/{opp.redditAuthor}</span>
+                    <Dot />
+                    <span>{timeAgo(opp.redditPostedAt)}</span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
 
-        {/* Right detail */}
+        {/* ── DETAIL PANEL ─────────────────────────────────────────────── */}
         {selected ? (
-          <div style={{ flex: 1, overflowY: 'auto', padding: '22px 28px', background: S.bg }}>
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden', background: S.bg }}>
 
-            {/* Post card */}
-            <div style={{
-              background: S.panel, borderRadius: 12, border: `1px solid ${S.line2}`,
-              padding: '18px 22px', marginBottom: 14,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-                <span style={{
-                  fontSize: 13, fontWeight: 700, padding: '3px 8px', borderRadius: 5,
-                  color: PAIN_COLORS[selected.painType].text, background: PAIN_COLORS[selected.painType].bg,
-                  textTransform: 'uppercase', letterSpacing: '.04em', fontFamily: 'JetBrains Mono, monospace',
-                }}>
-                  {PAIN_TYPE_LABELS[selected.painType]}
+            {/* Detail topbar */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 24px', borderBottom: `1px solid ${S.line}`, background: S.bg, flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: S.text3, fontSize: 15, flex: 1, minWidth: 0 }}>
+                <span style={{ flexShrink: 0 }}>Inbox</span>
+                <span style={{ color: S.text4, flexShrink: 0 }}>/</span>
+                <span style={{ color: S.text, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {selected.redditPostTitle}
                 </span>
-                <IntentBadge score={selected.intentScore} />
-                {!selected.shouldPitch && (
-                  <span style={{
-                    fontSize: 13, fontWeight: 700, color: S.red, background: S.redSoft,
-                    padding: '3px 8px', borderRadius: 5, fontFamily: 'JetBrains Mono, monospace',
-                  }}>
-                    ⚠ no pitch
-                  </span>
-                )}
               </div>
-
-              <a
-                href={selected.redditPostUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ fontSize: 18, fontWeight: 700, color: S.text, textDecoration: 'none', lineHeight: 1.4, display: 'block' }}
-              >
-                {selected.redditPostTitle}
-                <span style={{ fontSize: 14, color: S.text4, fontWeight: 400, marginLeft: 6 }}>↗</span>
-              </a>
-
-              <p style={{ fontSize: 14, color: S.text4, marginTop: 6, fontFamily: 'JetBrains Mono, monospace' }}>
-                r/{selected.subreddit.name} · u/{selected.redditAuthor} · {timeAgo(selected.redditPostedAt)} · ▲ {selected.redditScore} · {selected.redditCommentCount} comments
-              </p>
-
-              {selected.redditPostBody && (
-                <p style={{
-                  fontSize: 15, color: S.text3, marginTop: 12, lineHeight: 1.6,
-                  background: S.card, borderRadius: 8, padding: '10px 14px',
-                  display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-                }}>
-                  {selected.redditPostBody}
-                </p>
-              )}
-
-              {selected.scoringReasoning && (
-                <p style={{
-                  fontSize: 15, color: S.purple, marginTop: 10, fontStyle: 'italic',
-                  background: S.purpleSoft, borderRadius: 8, padding: '8px 12px',
-                }}>
-                  {selected.scoringReasoning}
-                </p>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                <button className="ib-icbtn" onClick={() => navigateRelative(-1)} disabled={selectedIndex <= 0} title="Previous (↑)" style={{ ...icBtn, opacity: selectedIndex <= 0 ? 0.3 : 1 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+                <button className="ib-icbtn" onClick={() => navigateRelative(1)} disabled={selectedIndex >= filtered.length - 1} title="Next (↓)" style={{ ...icBtn, opacity: selectedIndex >= filtered.length - 1 ? 0.3 : 1 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+                <span style={{ width: 1, height: 18, background: S.line, margin: '0 4px' }} />
+                <button className="ib-icbtn ib-danger" onClick={handleSkip} disabled={!!loading} title="Dismiss (X)" style={icBtn}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
             </div>
 
-            {/* Reply draft */}
-            <div style={{
-              background: S.panel, borderRadius: 12, border: `1px solid ${S.line2}`,
-              padding: '18px 22px',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                <span style={{ fontSize: 15, fontWeight: 700, color: S.text, fontFamily: 'JetBrains Mono, monospace', textTransform: 'uppercase', letterSpacing: '.05em' }}>
-                  AI Reply {reply && reply.version > 1 ? `(v${reply.version})` : ''}
-                </span>
-                {reply?.toneUsed && (
-                  <span style={{
-                    fontSize: 13, color: S.text3, background: S.card,
-                    padding: '3px 8px', borderRadius: 6, border: `1px solid ${S.line2}`,
-                    fontFamily: 'JetBrains Mono, monospace',
-                  }}>
-                    {reply.toneUsed}
+            {/* Scrollable body */}
+            <div ref={detailRef} className="ib-scroll" style={{ flex: 1, overflowY: 'auto', position: 'relative' }}>
+              <div style={{ maxWidth: 780, margin: '0 auto', padding: '28px 32px 140px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+                {/* Thread hero */}
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+                  <span style={{ width: 42, height: 42, borderRadius: '50%', background: S.orange, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 17, flexShrink: 0 }}>
+                    r
                   </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <h1 style={{ margin: '0 0 8px', fontSize: 24, fontWeight: 700, lineHeight: 1.3, letterSpacing: '-.015em', color: S.text, display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+                      <span style={{ flex: 1 }}>{selected.redditPostTitle}</span>
+                      <a href={selected.redditPostUrl} target="_blank" rel="noopener noreferrer" className="ib-open"
+                        style={{ color: S.text3, display: 'inline-flex', flexShrink: 0, marginTop: 3 }} title="Open on Reddit">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                      </a>
+                    </h1>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontFamily: 'JetBrains Mono, monospace', fontSize: 13, color: S.text3 }}>
+                      <span style={{ color: S.text, fontWeight: 600 }}>r/{selected.subreddit.name}</span>
+                      {/* Promo welcome pill */}
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                        padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600,
+                        letterSpacing: '.04em', textTransform: 'uppercase',
+                        background: selected.subreddit.allowsPromotion ? S.greenSoft : S.redSoft,
+                        color: selected.subreddit.allowsPromotion ? S.green : S.red,
+                        border: `1px solid ${selected.subreddit.allowsPromotion ? S.greenLine : S.redSoft}`,
+                      }}>
+                        <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', display: 'inline-block', flexShrink: 0 }} />
+                        {selected.subreddit.allowsPromotion ? 'Promo welcome' : 'No promo'}
+                      </span>
+                      <Dot /><span style={{ color: S.text2 }}>u/{selected.redditAuthor}</span>
+                      <Dot /><span>{timeAgo(selected.redditPostedAt)}</span>
+                      <Dot /><span>▲ {selected.redditScore}</span>
+                      <Dot /><span>💬 {selected.redditCommentCount} comments</span>
+                    </div>
+                  </div>
+                  {/* Intent score card */}
+                  <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '10px 14px', background: S.card, border: `1px solid ${S.orangeLine}`, borderRadius: 10, boxShadow: `0 0 0 4px ${S.orangeSoft} inset`, minWidth: 80 }}>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: S.orange2, lineHeight: 1, letterSpacing: '-.015em' }}>
+                      {selected.intentScore}<small style={{ fontSize: 11, color: S.text3, fontWeight: 500, marginLeft: 1 }}>%</small>
+                    </div>
+                    <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', color: S.text3, marginTop: 4 }}>
+                      Intent
+                    </div>
+                  </div>
+                </div>
+
+                {/* Signal row */}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <SignalChip match icon={<CheckIc />} text={<>Matched <b style={{ color: S.text, fontWeight: 600 }}>{PAIN_STYLE[selected.painType].label.toLowerCase()}</b></>} />
+                  <SignalChip icon={<PersonIc />} text={<><b style={{ color: S.text, fontWeight: 600 }}>{PAIN_PERSONA[selected.painType]}</b> · {selected.painType.replace(/_/g, ' ')}</>} />
+                  <SignalChip icon={<TrendIc />} text={<>ICP fit · <b style={{ color: S.text, fontWeight: 600 }}>{selected.intentScore >= 75 ? 'high' : selected.intentScore >= 50 ? 'medium' : 'low'}</b></>} />
+                  {!selected.shouldPitch && (
+                    <SignalChip icon={<AlertIc />} text={<>No pitch — value-only reply</>} />
+                  )}
+                </div>
+
+                {/* Original post */}
+                {selected.redditPostBody && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <SectionHead left="Original post" right={<>Posted <b style={{ color: S.text2, fontWeight: 600 }}>{timeAgo(selected.redditPostedAt)}</b></>} />
+                    <div style={{ background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, overflow: 'hidden' }}>
+                      <div
+                        className={`ib-post-fade${postExpanded ? ' expanded' : ''}`}
+                        style={{ padding: '16px 18px', color: S.text2, fontSize: 16, lineHeight: 1.6, maxHeight: postExpanded ? 'none' : 120, overflow: postExpanded ? 'visible' : 'hidden', position: 'relative' }}
+                      >
+                        {selected.redditPostBody.split('\n').filter(Boolean).map((p, i) => (
+                          <p key={i} style={{ margin: i > 0 ? '10px 0 0' : 0 }}>{p}</p>
+                        ))}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 18px', borderTop: `1px solid ${S.line}`, background: S.panel2, fontFamily: 'JetBrains Mono, monospace', fontSize: 13, color: S.text3 }}>
+                        <span>▲ <b style={{ color: S.text2, fontWeight: 500 }}>{selected.redditScore}</b></span>
+                        <span>💬 <b style={{ color: S.text2, fontWeight: 500 }}>{selected.redditCommentCount}</b> comments</span>
+                        <button className="ib-expand" onClick={() => setPostExpanded(e => !e)} style={{ marginLeft: 'auto', color: S.orange2, fontFamily: 'JetBrains Mono, monospace', fontSize: 13, letterSpacing: '.06em', textTransform: 'uppercase', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}>
+                          {postExpanded ? 'Show less ↑' : 'Read more ↓'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 )}
+
+                {/* Thread comments — with AI reply generation */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <SectionHead
+                    left="Comments · reply opportunities"
+                    right={
+                      commentsLoading ? 'Loading…' :
+                      comments === null ? undefined :
+                      comments.length === 0 ? 'No comments' :
+                      `${comments.length} shown`
+                    }
+                  />
+                  {commentsLoading ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '14px 18px', background: S.card, border: `1px solid ${S.line}`, borderRadius: 12, fontSize: 14, color: S.text3 }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="ib-spin" style={{ color: S.orange, flexShrink: 0 }}>
+                        <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                      </svg>
+                      Loading comments from Reddit…
+                    </div>
+                  ) : comments === null ? (
+                    <button
+                      onClick={() => selected && fetchComments(selected.redditPostUrl)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8, padding: '14px 18px',
+                        background: S.card, border: `1px dashed ${S.line2}`, borderRadius: 12,
+                        fontSize: 14, color: S.text3, cursor: 'pointer', fontFamily: 'inherit', width: '100%',
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: S.text4 }}>
+                        <path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5z"/>
+                      </svg>
+                      Load comments
+                    </button>
+                  ) : commentsError ? (
+                    <div style={{ padding: '12px 18px', background: S.card, border: `1px solid ${S.line}`, borderRadius: 12, fontSize: 13, color: S.text3 }}>
+                      Could not load comments: {commentsError}
+                      <button onClick={() => selected && fetchComments(selected.redditPostUrl)} style={{ marginLeft: 10, color: S.orange2, background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit' }}>Retry</button>
+                    </div>
+                  ) : comments.length === 0 ? (
+                    <div style={{ padding: '14px 18px', background: S.card, border: `1px solid ${S.line}`, borderRadius: 12, fontSize: 14, color: S.text3 }}>
+                      No comments on this post yet.
+                    </div>
+                  ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {comments.map((c, i) => {
+                          const cr = commentReplies[i]
+                          return (
+                            <div key={i} style={{ background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, overflow: 'hidden' }}>
+                              {/* Comment header */}
+                              <div style={{ padding: '11px 16px', borderBottom: `1px solid ${S.line}`, display: 'flex', alignItems: 'center', gap: 8, background: S.panel2 }}>
+                                <div style={{
+                                  width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                                  background: 'linear-gradient(135deg,#8B6CFF,#5040C2)',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  fontSize: 12, fontWeight: 700, color: '#fff',
+                                }}>
+                                  {c.author[0]?.toUpperCase() ?? '?'}
+                                </div>
+                                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 600, color: S.text2 }}>u/{c.author}</span>
+                                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: S.text3 }}>▲ {c.score}</span>
+                                <div style={{ marginLeft: 'auto' }}>
+                                  {!cr ? (
+                                    <button
+                                      onClick={() => generateCommentReply(i, c)}
+                                      style={{
+                                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                                        padding: '6px 12px', borderRadius: 7, cursor: 'pointer',
+                                        fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
+                                        background: S.orangeSoft, border: `1px solid ${S.orangeLine}`,
+                                        color: S.orange2, transition: 'all .15s',
+                                      }}
+                                    >
+                                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                                      AI Reply
+                                    </button>
+                                  ) : cr.loading ? (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: S.orange2, fontFamily: 'JetBrains Mono, monospace' }}>
+                                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="ib-spin"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                                      Generating…
+                                    </span>
+                                  ) : (
+                                    <button
+                                      onClick={() => copyCommentReply(i, cr.text)}
+                                      style={{
+                                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                                        padding: '6px 12px', borderRadius: 7, cursor: 'pointer',
+                                        fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
+                                        background: cr.copied ? S.greenSoft : S.orange,
+                                        border: cr.copied ? `1px solid ${S.greenLine}` : 'none',
+                                        color: cr.copied ? S.green : '#fff',
+                                        transition: 'all .15s',
+                                        boxShadow: cr.copied ? 'none' : 'inset 0 -2px 0 rgba(0,0,0,.18)',
+                                      }}
+                                    >
+                                      {cr.copied ? (
+                                        <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>Copied!</>
+                                      ) : (
+                                        <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy reply</>
+                                      )}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Comment body */}
+                              <div style={{ padding: '12px 16px', fontSize: 14, color: S.text2, lineHeight: 1.55 }}>
+                                {c.body.split('\n').filter(Boolean).slice(0, 4).map((p, pi) => (
+                                  <p key={pi} style={{ margin: pi > 0 ? '8px 0 0' : 0 }}>{p}</p>
+                                ))}
+                              </div>
+
+                              {/* AI-generated reply (shown after generation) */}
+                              {cr && !cr.loading && cr.text && (
+                                <div style={{ borderTop: `1px solid ${S.line}`, background: S.bg }}>
+                                  <div style={{ padding: '10px 16px 4px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <span style={{
+                                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                                      padding: '3px 8px', borderRadius: 5, fontSize: 11, fontWeight: 700,
+                                      letterSpacing: '.06em', textTransform: 'uppercase' as const,
+                                      background: S.orangeSoft, color: S.orange2,
+                                      fontFamily: 'JetBrains Mono, monospace',
+                                    }}>
+                                      <span>✦</span> AI reply
+                                    </span>
+                                    <button
+                                      onClick={() => setCommentReplies(prev => { const n = { ...prev }; delete n[i]; return n })}
+                                      style={{ marginLeft: 'auto', background: 'none', border: 'none', color: S.text4, cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 0 }}
+                                    >×</button>
+                                  </div>
+                                  <div style={{ padding: '8px 16px 14px', fontSize: 14, color: S.text, lineHeight: 1.6 }}>
+                                    {cr.text.split('\n').filter(Boolean).map((p, pi) => (
+                                      <p key={pi} style={{ margin: pi > 0 ? '8px 0 0' : 0 }}>{p}</p>
+                                    ))}
+                                  </div>
+                                  {cr.whyThisWorks && (
+                                    <div style={{ margin: '0 16px 14px', padding: '8px 12px', borderRadius: 8, background: S.purpleSoft, border: `1px solid ${S.purpleLine}`, fontSize: 13, color: S.purple, lineHeight: 1.5 }}>
+                                      {cr.whyThisWorks}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                  )}
+                </div>
+
+                {/* Why matched */}
+                {selected.scoringReasoning && (
+                  <div style={{ background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, padding: '14px 18px', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                    <span style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, background: S.purpleSoft, color: S.purple, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>
+                    </span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 16, fontWeight: 600, color: S.text, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        Why this matched
+                        <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '.06em', textTransform: 'uppercase', padding: '2px 7px', borderRadius: 4, background: S.purpleSoft, color: S.purple, fontWeight: 600 }}>
+                          AI rationale
+                        </span>
+                      </div>
+                      <p style={{ margin: 0, fontSize: 16, color: S.text2, lineHeight: 1.55 }}>{selected.scoringReasoning}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* AI Reply */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <SectionHead left="AI-drafted reply" right={reply ? <>Version <b style={{ color: S.text2, fontWeight: 600 }}>V{reply.version}</b></> : undefined} />
+                  {reply ? (
+                    <div style={{ background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, overflow: 'hidden' }}>
+                      {/* Reply header */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', borderBottom: `1px solid ${S.line}`, background: S.panel2, flexWrap: 'wrap' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 6, background: S.orangeSoft, color: S.orange2, fontFamily: 'JetBrains Mono, monospace', fontSize: 12, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase' }}>
+                          <span>✦</span> AI reply
+                        </span>
+                        {/* Pitch toggle — auto-regenerates on click */}
+                        <button
+                          onClick={() => {
+                            const next = !effectivePitch
+                            setIncludePitch(next)
+                            handleRegen(next)
+                          }}
+                          disabled={loading === 'regen'}
+                          title={effectivePitch ? 'Link included — click to remove and regenerate' : 'No link — click to add and regenerate'}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 5,
+                            padding: '4px 9px', borderRadius: 6,
+                            cursor: loading === 'regen' ? 'not-allowed' : 'pointer',
+                            fontFamily: 'JetBrains Mono, monospace', fontSize: 12,
+                            fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase',
+                            border: `1px solid ${effectivePitch ? S.greenLine : S.line}`,
+                            background: effectivePitch ? S.greenSoft : S.line,
+                            color: effectivePitch ? S.green : S.text4,
+                            opacity: loading === 'regen' ? 0.5 : 1,
+                            transition: 'all .15s',
+                          }}
+                        >
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            {effectivePitch
+                              ? <><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></>
+                              : <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>
+                            }
+                          </svg>
+                          {effectivePitch ? 'Link on' : 'No link'}
+                        </button>
+                        {reply.toneUsed && (
+                          <div style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 6, background: S.card, border: `1px solid ${S.line}`, fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: S.text2, letterSpacing: '.04em' }}>
+                            <span style={{ width: 7, height: 7, borderRadius: '50%', background: S.orange, display: 'inline-block', flexShrink: 0 }} />
+                            {reply.toneUsed}
+                          </div>
+                        )}
+                      </div>
+                      {/* Reply body */}
+                      {editMode ? (
+                        <textarea
+                          value={replyText}
+                          onChange={e => setReplyText(e.target.value)}
+                          rows={9}
+                          style={{ width: '100%', padding: '18px 20px', color: S.text, fontSize: 16, lineHeight: 1.65, background: S.card, border: 'none', outline: `1px solid ${S.orange}`, resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box', display: 'block' }}
+                        />
+                      ) : (
+                        <div style={{ padding: '18px 20px', color: S.text, fontSize: 16, lineHeight: 1.65 }}>
+                          {replyText.split('\n').filter(Boolean).map((p, i) => (
+                            <p key={i} style={{ margin: i > 0 ? '12px 0 0' : 0 }}>{p}</p>
+                          ))}
+                        </div>
+                      )}
+                      {/* Reply footer */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderTop: `1px solid ${S.line}`, background: S.panel2 }}>
+                        <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, color: S.text3 }}>
+                          📝 <b style={{ color: S.text2 }}>{wordCount(replyText)}</b> words
+                        </span>
+                        <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, color: S.text3 }}>
+                          🎯 <b style={{ color: S.text2 }}>{selected.intentScore}%</b> match
+                        </span>
+                        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                          <button className="ib-btn-ghost" onClick={() => handleRegen()} disabled={loading === 'regen'} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 12px', borderRadius: 7, fontSize: 13, fontWeight: 500, background: S.panel, border: `1px solid ${S.line}`, color: S.text, cursor: loading === 'regen' ? 'not-allowed' : 'pointer', fontFamily: 'inherit', transition: 'all .15s' }}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={loading === 'regen' ? 'ib-spin' : undefined}>
+                              <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                            </svg>
+                            {loading === 'regen' ? 'Generating…' : 'Regenerate'}
+                          </button>
+                          <button className="ib-btn-ghost" onClick={() => setEditMode(e => !e)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 12px', borderRadius: 7, fontSize: 13, fontWeight: 500, background: editMode ? S.orangeSoft : S.panel, border: `1px solid ${editMode ? S.orangeLine : S.line}`, color: editMode ? S.orange2 : S.text, cursor: 'pointer', fontFamily: 'inherit', transition: 'all .15s' }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>
+                            {editMode ? 'Done' : 'Edit'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, padding: '32px', textAlign: 'center' }}>
+                      <p style={{ fontSize: 16, color: S.text3, margin: '0 0 14px' }}>No reply generated for this thread yet.</p>
+                      <button onClick={() => handleRegen()} disabled={loading === 'regen'} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 7, fontSize: 15, fontWeight: 600, background: S.orangeSoft, border: `1px solid ${S.orangeLine}`, color: S.orange2, cursor: 'pointer', fontFamily: 'inherit' }}>
+                        {loading === 'regen' ? 'Generating…' : '✦ Generate reply'}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Why this works */}
+                  {reply?.whyThisWorks && (
+                    <div style={{ padding: '14px 18px', borderRadius: 10, background: S.purpleSoft, border: `1px solid ${S.purpleLine}`, fontSize: 16, color: S.purple, lineHeight: 1.55 }}>
+                      {reply.whyThisWorks}
+                    </div>
+                  )}
+                </div>
+
               </div>
 
-              {reply ? (
-                <>
-                  <textarea
-                    value={replyText}
-                    onChange={e => { setReplyText(e.target.value); setCopied(false) }}
-                    rows={6}
-                    style={{
-                      width: '100%', fontSize: 16, lineHeight: 1.65, color: S.text2,
-                      background: S.card, border: `1px solid ${S.line2}`, borderRadius: 8,
-                      padding: '12px 14px', fontFamily: 'inherit', resize: 'vertical',
-                      outline: 'none', boxSizing: 'border-box',
-                    }}
-                  />
-                  {reply.whyThisWorks && (
-                    <p style={{
-                      fontSize: 15, color: S.purple, marginTop: 10,
-                      background: S.purpleSoft, borderRadius: 8, padding: '10px 14px',
-                      border: `1px solid rgba(155,139,244,.2)`,
-                    }}>
-                      {reply.whyThisWorks}
-                    </p>
-                  )}
-                </>
-              ) : (
-                <div style={{ textAlign: 'center', padding: '24px 0', background: S.card, borderRadius: 8 }}>
-                  <p style={{ fontSize: 16, color: S.text4 }}>No reply generated yet.</p>
-                </div>
-              )}
-
-              {/* Actions */}
-              <div style={{ display: 'flex', gap: 8, marginTop: 14, paddingTop: 14, borderTop: `1px solid ${S.line}`, alignItems: 'center' }}>
-                {/* Copy */}
-                <button
-                  onClick={handleCopy}
-                  disabled={!reply || loading !== null}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '9px 18px', background: copied ? S.green : S.orange,
-                    color: '#fff', border: 'none', borderRadius: 8, fontSize: 15,
-                    fontWeight: 700, cursor: (!reply || loading !== null) ? 'not-allowed' : 'pointer',
-                    fontFamily: 'inherit', transition: 'background .15s',
-                  }}
-                >
-                  {copied ? <><CheckIcon /> Copied!</> : <><CopyIcon /> Copy reply</>}
-                </button>
-
-                {/* Open thread */}
-                <a
-                  href={selected.redditPostUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px',
-                    background: S.panel2, border: `1px solid ${S.line2}`, borderRadius: 8,
-                    fontSize: 15, fontWeight: 600, color: S.text2, textDecoration: 'none',
-                  }}
-                >
-                  <RedditIcon /> Open thread
-                </a>
-
-                {/* Regen */}
-                <button
-                  onClick={handleRegen}
-                  disabled={loading !== null}
-                  style={{
-                    padding: '9px 12px', background: 'transparent', border: `1px solid ${S.line2}`,
-                    borderRadius: 8, fontSize: 16, fontWeight: 600, color: S.text3,
-                    cursor: loading !== null ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
-                  }}
-                >
-                  {loading === 'regen' ? '…' : '↺'}
-                </button>
-
-                {/* Mark done / Skip */}
-                <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-                  {currentStatus === 'QUEUED' && (
-                    <button
-                      onClick={handleMarkDone}
-                      disabled={loading !== null}
-                      style={{
-                        padding: '9px 12px', background: S.greenSoft, border: `1px solid rgba(63,176,122,.3)`,
-                        borderRadius: 8, fontSize: 14, fontWeight: 700, color: S.green,
-                        cursor: loading !== null ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
-                        fontFamily_mono: 'JetBrains Mono, monospace',
-                      } as any}
-                    >
-                      {loading === 'done' ? '…' : '✓ Done'}
+              {/* Sticky action bar */}
+              <div style={{ position: 'sticky', bottom: 0, left: 0, right: 0, background: `linear-gradient(180deg, transparent, ${S.bg} 28%)`, padding: '18px 32px 22px', display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+                <div style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 8, padding: 10, background: S.panel, border: `1px solid ${S.line2}`, borderRadius: 14, boxShadow: '0 16px 40px -10px rgba(0,0,0,.35)', maxWidth: 780, width: '100%' }}>
+                  <div style={{ flex: 1, display: 'flex', gap: 8 }}>
+                    {/* Copy */}
+                    <button onClick={handleCopy} disabled={!reply} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 7, fontSize: 15, fontWeight: 600, background: copied ? S.green : S.orange, color: '#fff', border: 'none', cursor: !reply ? 'not-allowed' : 'pointer', fontFamily: 'inherit', transition: 'background .15s', boxShadow: 'inset 0 -2px 0 rgba(0,0,0,.18)' }}>
+                      {copied ? (
+                        <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><polyline points="20 6 9 17 4 12"/></svg>Copied!</>
+                      ) : (
+                        <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy reply</>
+                      )}
                     </button>
-                  )}
-                  <button
-                    onClick={handleSkip}
-                    disabled={loading !== null}
-                    style={{
-                      padding: '9px 12px', background: 'transparent', border: 'none',
-                      fontSize: 14, fontWeight: 600, color: S.text4,
-                      cursor: loading !== null ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
-                    }}
-                  >
-                    {loading === 'skip' ? '…' : 'Dismiss'}
-                  </button>
+                    {/* Open thread */}
+                    <a href={selected.redditPostUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 7, fontSize: 15, fontWeight: 500, background: S.panel2, border: `1px solid ${S.line}`, color: S.text, textDecoration: 'none' }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                      Open thread
+                    </a>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, paddingLeft: 10, borderLeft: `1px solid ${S.line}` }}>
+                    {activeStatus === 'QUEUED' && (
+                      <button onClick={handleMarkDone} disabled={!!loading} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 7, fontSize: 15, fontWeight: 600, background: S.greenSoft, border: `1px solid ${S.greenLine}`, color: S.green, cursor: loading ? 'not-allowed' : 'pointer', fontFamily: 'inherit', transition: 'all .15s' }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><polyline points="20 6 9 17 4 12"/></svg>
+                        {loading === 'done' ? 'Marking…' : 'Done'}
+                      </button>
+                    )}
+                    <button onClick={handleSkip} disabled={!!loading} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 7, fontSize: 15, fontWeight: 500, background: S.panel2, border: `1px solid ${S.line}`, color: S.text, cursor: loading ? 'not-allowed' : 'pointer', fontFamily: 'inherit', transition: 'all .15s' }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      {loading === 'skip' ? 'Dismissing…' : 'Dismiss'}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         ) : (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: S.bg }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: S.bg }}>
             <div style={{ textAlign: 'center' }}>
-              <div style={{
-                width: 56, height: 56, borderRadius: 14, background: S.panel,
-                border: `1px solid ${S.line2}`, display: 'flex', alignItems: 'center',
-                justifyContent: 'center', margin: '0 auto 14px',
-              }}>
-                <svg width="24" height="24" fill="none" stroke={S.text4} strokeWidth="1.4" viewBox="0 0 24 24">
-                  <rect x="2" y="4" width="20" height="16" rx="2.5"/>
-                  <path d="M2 8l10 7 10-7"/>
-                </svg>
+              <div style={{ width: 52, height: 52, borderRadius: 13, background: S.panel, border: `1px solid ${S.line2}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" style={{ color: S.text4 }}><path d="M3 7l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>
               </div>
-              <p style={{ fontSize: 16, color: S.text3, fontWeight: 600 }}>Select an opportunity</p>
+              <p style={{ fontSize: 18, color: S.text3, fontWeight: 600, margin: '0 0 6px' }}>Select a thread</p>
+              <p style={{ fontSize: 15, color: S.text4, margin: 0 }}>Pick one from the inbox list</p>
             </div>
           </div>
         )}
       </div>
-    </div>
+    </>
   )
 }
 
-function CopyIcon() {
-  return <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+// ─── Tiny helpers ─────────────────────────────────────────────────────────────
+
+function Dot() {
+  return <span style={{ width: 3, height: 3, borderRadius: '50%', background: S.text4, display: 'inline-block', flexShrink: 0 }} />
 }
-function CheckIcon() {
-  return <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+
+function Kbd({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  return (
+    <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9.5, padding: '2px 5px', borderRadius: 4, background: S.line, border: `1px solid ${S.line}`, color: S.text3, marginLeft: 2, ...style }}>
+      {children}
+    </span>
+  )
 }
-function RedditIcon() {
-  return <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .379-.239l2.906.617a1.214 1.214 0 0 1 1.108-.701z"/></svg>
-}
+
+function CheckIc()  { return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><polyline points="20 6 9 17 4 12"/></svg> }
+function PersonIc() { return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 14 0v1"/></svg> }
+function TrendIc()  { return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 3v18h18"/><polyline points="7 14 11 10 14 13 21 6"/></svg> }
+function AlertIc()  { return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> }

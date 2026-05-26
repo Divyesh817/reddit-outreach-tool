@@ -5,18 +5,21 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { S, DARK_VARS, LIGHT_VARS } from '@/lib/theme'
+import { PLAN_LIMITS } from '@/types'
 
 interface Props {
   user: { name: string; email: string; avatarUrl: string | null; plan: string }
   products: { id: string; name: string; url: string }[]
   children: React.ReactNode
   opportunityCount?: number
+  repliesThisMonth?: number
 }
 
 const PAGE_LABELS: Record<string, string> = {
   '/dashboard': 'Dashboard',
   '/opportunities': 'Inbox',
   '/products': 'Products',
+  '/geo': 'GEO',
   '/settings': 'Settings',
 }
 
@@ -27,20 +30,39 @@ function getPageLabel(pathname: string) {
   return 'Redgrow'
 }
 
-export function DashboardShell({ user, products, children, opportunityCount = 0 }: Props) {
+export function DashboardShell({ user, products, children, opportunityCount = 0, repliesThisMonth = 0 }: Props) {
   const pathname = usePathname()
   const router = useRouter()
+  const [pendingHref, setPendingHref] = useState<string | null>(null)
   const [signingOut, setSigningOut] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
   const [dark, setDark] = useState(true)
+  const [productsOpen, setProductsOpen] = useState(false)
   const product = products[0]
   const initials = (user.name || user.email).slice(0, 2).toUpperCase()
   const pageLabel = getPageLabel(pathname)
+
+  const planLimits = PLAN_LIMITS[user.plan as keyof typeof PLAN_LIMITS] ?? PLAN_LIMITS['FREE']
+  const replyLimit = planLimits.repliesPerMonth
+  const replyPct = Math.min(100, Math.round((repliesThisMonth / replyLimit) * 100))
+  const productLimit = planLimits.products
+  const isFree = user.plan === 'FREE'
+  const emptySlots = Math.max(0, productLimit - products.length)
+
+  const PLAN_DISPLAY: Record<string, string> = {
+    FREE: 'Free plan',
+    STARTER: 'Starter plan',
+    GROWTH: 'Growth plan',
+  }
 
   useEffect(() => {
     const saved = localStorage.getItem('rg-theme')
     if (saved === 'light') setDark(false)
   }, [])
+
+  useEffect(() => {
+    setPendingHref(null)
+  }, [pathname])
 
   function toggleTheme() {
     const next = !dark
@@ -59,6 +81,7 @@ export function DashboardShell({ user, products, children, opportunityCount = 0 
     { href: '/dashboard',     label: 'Dashboard', icon: HomeIcon },
     { href: '/opportunities', label: 'Inbox',     icon: InboxIcon, badge: opportunityCount > 0 ? String(opportunityCount) : null },
     { href: '/products',      label: 'Products',  icon: BoxIcon },
+    { href: '/geo',           label: 'GEO',       icon: GeoIcon },
     { href: '/settings',      label: 'Settings',  icon: SettingsIcon },
   ]
 
@@ -90,27 +113,111 @@ export function DashboardShell({ user, products, children, opportunityCount = 0 
           <span style={{ fontSize: 17, fontWeight: 600, color: S.text, letterSpacing: '-.01em' }}>Redgrow</span>
         </div>
 
-        {/* Product switcher */}
-        {product && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            padding: '10px 12px', borderRadius: 10,
-            background: S.panel2, border: `1px solid ${S.line}`,
-          }}>
-            <span style={{
-              width: 26, height: 26, borderRadius: 7,
-              background: 'linear-gradient(135deg,#FFA070,#E54B1B)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 15, fontWeight: 700, color: '#fff', flexShrink: 0,
-            }}>
-              {product.name[0].toUpperCase()}
+        {/* Product accordion */}
+        <div style={{ background: S.panel2, border: `1px solid ${S.line}`, borderRadius: 11, overflow: 'hidden' }}>
+          {/* Accordion trigger — active product */}
+          <button
+            onClick={() => setProductsOpen(o => !o)}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+              padding: '10px 12px', background: 'none', border: 'none',
+              cursor: 'pointer', textAlign: 'left',
+            }}
+          >
+            {product ? (
+              <span style={{
+                width: 26, height: 26, borderRadius: 7, flexShrink: 0,
+                background: 'linear-gradient(135deg,#FFA070,#E54B1B)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 14, fontWeight: 700, color: '#fff',
+              }}>
+                {product.name[0].toUpperCase()}
+              </span>
+            ) : (
+              <span style={{ width: 26, height: 26, borderRadius: 7, flexShrink: 0, background: S.line, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg width="12" height="12" fill="none" stroke={S.text4} strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+              </span>
+            )}
+            <span style={{ flex: 1, fontSize: 15, fontWeight: 500, color: product ? S.text : S.text4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {product ? product.name : 'No product'}
             </span>
-            <span style={{ flex: 1, fontSize: 16.5, fontWeight: 500, color: S.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {product.name}
-            </span>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={S.text3} strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
-          </div>
-        )}
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={S.text3} strokeWidth="2"
+              style={{ flexShrink: 0, transform: productsOpen ? 'rotate(180deg)' : 'none', transition: 'transform .18s' }}>
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+
+          {/* Expanded product list */}
+          {productsOpen && (
+            <div style={{ borderTop: `1px solid ${S.line}`, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {/* Existing products */}
+              {products.map((p, i) => (
+                <Link
+                  key={p.id}
+                  href={`/products/${p.id}`}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 9,
+                    padding: '7px 8px', borderRadius: 7, textDecoration: 'none',
+                    background: i === 0 ? S.orangeSoft : 'transparent',
+                    border: `1px solid ${i === 0 ? S.orangeLine : 'transparent'}`,
+                    transition: 'all .12s',
+                  }}
+                >
+                  <span style={{
+                    width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                    background: 'linear-gradient(135deg,#FFA070,#E54B1B)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 11, fontWeight: 700, color: '#fff',
+                  }}>
+                    {p.name[0].toUpperCase()}
+                  </span>
+                  <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: i === 0 ? S.orange2 : S.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {p.name}
+                  </span>
+                  {i === 0 && (
+                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: S.orange, flexShrink: 0 }} />
+                  )}
+                </Link>
+              ))}
+
+              {/* Empty "+" slots — add for paid, locked for free */}
+              {Array.from({ length: emptySlots }).map((_, i) => (
+                isFree ? (
+                  <div key={`locked-${i}`} style={{
+                    display: 'flex', alignItems: 'center', gap: 9,
+                    padding: '7px 8px', borderRadius: 7,
+                    border: `1px dashed ${S.line2}`, opacity: 0.6,
+                  }}>
+                    <span style={{
+                      width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                      background: S.line, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <svg width="10" height="10" fill="none" stroke={S.text4} strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    </span>
+                    <span style={{ flex: 1, fontSize: 12, color: S.text4 }}>Upgrade to unlock</span>
+                    <Link href="/settings" onClick={e => e.stopPropagation()} style={{ fontSize: 10.5, color: S.orange2, textDecoration: 'none', fontWeight: 600, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '.04em' }}>
+                      ↑ Pro
+                    </Link>
+                  </div>
+                ) : (
+                  <Link key={`add-${i}`} href="/products" style={{
+                    display: 'flex', alignItems: 'center', gap: 9,
+                    padding: '7px 8px', borderRadius: 7, textDecoration: 'none',
+                    border: `1px dashed ${S.line2}`, transition: 'all .12s',
+                  }}>
+                    <span style={{
+                      width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                      background: S.line, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <svg width="10" height="10" fill="none" stroke={S.text3} strokeWidth="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    </span>
+                    <span style={{ flex: 1, fontSize: 12.5, color: S.text3, fontWeight: 500 }}>Add product</span>
+                  </Link>
+                )
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Nav */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -118,11 +225,18 @@ export function DashboardShell({ user, products, children, opportunityCount = 0 
             Workspace
           </div>
           {navItems.map(({ href, label, icon: Icon, badge }) => {
-            const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
+            const effectivePath = pendingHref ?? pathname
+            const active = effectivePath === href || (href !== '/dashboard' && effectivePath.startsWith(href))
             return (
               <Link
                 key={href}
                 href={href}
+                scroll={false}
+                onClick={() => {
+                  if (href !== pathname) {
+                    setPendingHref(href)
+                  }
+                }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 12,
                   padding: active ? '8px 11px' : '9px 12px', borderRadius: 8,
@@ -163,20 +277,17 @@ export function DashboardShell({ user, products, children, opportunityCount = 0 
                 </div>
               )}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 16, fontWeight: 500, color: S.text, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <p style={{ fontSize: 14, fontWeight: 500, color: S.text, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {user.name || user.email}
-                </p>
-                <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, letterSpacing: '.12em', textTransform: 'uppercase', color: S.text3, margin: 0 }}>
-                  {user.plan} plan
                 </p>
               </div>
             </div>
             <div style={{ marginTop: 10, height: 4, background: S.line, borderRadius: 999, overflow: 'hidden', position: 'relative' }}>
-              <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: '30%', background: `linear-gradient(90deg,${S.orange2},${S.orange})`, borderRadius: 999 }} />
+              <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${replyPct}%`, background: `linear-gradient(90deg,${S.orange2},${S.orange})`, borderRadius: 999 }} />
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontFamily: "'JetBrains Mono', monospace", fontSize: 13.5, color: S.text3 }}>
-              <span>Free plan</span>
-              <span>1 product</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontFamily: "'JetBrains Mono', monospace", fontSize: 11.5, color: S.text3 }}>
+              <span>{PLAN_DISPLAY[user.plan] ?? user.plan}</span>
+              <span>{repliesThisMonth} / {replyLimit} replies</span>
             </div>
             <button
               onClick={handleSignOut}
@@ -306,4 +417,5 @@ export function DashboardShell({ user, products, children, opportunityCount = 0 
 function HomeIcon()     { return <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M3 12L12 4l9 8"/><path d="M5 10v10h14V10"/></svg> }
 function InboxIcon()    { return <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M3 7l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg> }
 function BoxIcon()      { return <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> }
+function GeoIcon()      { return <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3a14.5 14.5 0 0 1 0 18M12 3a14.5 14.5 0 0 0 0 18M3 12h18"/></svg> }
 function SettingsIcon() { return <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> }

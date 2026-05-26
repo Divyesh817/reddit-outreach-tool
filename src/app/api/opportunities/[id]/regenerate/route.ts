@@ -7,11 +7,15 @@ import { prisma } from '@/lib/prisma'
 import { generateReply } from '@/lib/anthropic'
 import type { PainType } from '@/types'
 
-export async function POST(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const userId = (user as any).id
+
+  const body = await req.json().catch(() => ({}))
+  const includePitchOverride: boolean | undefined =
+    typeof body.includePitch === 'boolean' ? body.includePitch : undefined
 
   const opportunity = await prisma.opportunity.findFirst({
     where: { id: params.id, product: { userId } },
@@ -23,13 +27,8 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   })
   if (!opportunity) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  // Deactivate old replies
-  await prisma.reply.updateMany({
-    where: { opportunityId: params.id },
-    data: { isActive: false },
-  })
-
-  const currentVersion = opportunity.replies[0]?.version ?? 0
+  const existingReply = opportunity.replies[0]
+  const currentVersion = existingReply?.version ?? 0
 
   const result = await generateReply(
     {
@@ -47,19 +46,35 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
       summary: opportunity.product.summary,
     },
     opportunity.painType as PainType,
-    opportunity.shouldPitch
+    opportunity.shouldPitch,
+    includePitchOverride
   )
 
-  const reply = await prisma.reply.create({
-    data: {
-      opportunityId: params.id,
-      text: result.text,
-      toneUsed: result.toneUsed,
-      whyThisWorks: result.whyThisWorks,
-      version: currentVersion + 1,
-      isActive: true,
-    },
-  })
+  // UPDATE existing record — regenerate does not count as a new reply hit
+  let reply
+  if (existingReply) {
+    reply = await prisma.reply.update({
+      where: { id: existingReply.id },
+      data: {
+        text: result.text,
+        toneUsed: result.toneUsed,
+        whyThisWorks: result.whyThisWorks,
+        version: currentVersion + 1,
+      },
+    })
+  } else {
+    // First generation — create and count
+    reply = await prisma.reply.create({
+      data: {
+        opportunityId: params.id,
+        text: result.text,
+        toneUsed: result.toneUsed,
+        whyThisWorks: result.whyThisWorks,
+        version: 1,
+        isActive: true,
+      },
+    })
+  }
 
   return NextResponse.json({ data: reply })
 }

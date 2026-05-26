@@ -45,7 +45,8 @@ export async function POST(req: NextRequest) {
   // Enforce plan product limit
   const dbUser = await prisma.user.findUnique({ where: { id: userId } })
   const productCount = await prisma.product.count({ where: { userId, isActive: true } })
-  const limit = PLAN_LIMITS[dbUser?.plan ?? 'STARTER'].products
+  const planKey = (dbUser?.plan ?? 'STARTER') as string
+  const limit = (PLAN_LIMITS as Record<string, { products: number }>)[planKey]?.products ?? PLAN_LIMITS['GROWTH'].products
   if (productCount >= limit) {
     return NextResponse.json({ error: `Your plan allows max ${limit} product(s). Upgrade to add more.` }, { status: 403 })
   }

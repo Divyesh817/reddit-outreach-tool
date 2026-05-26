@@ -13,27 +13,20 @@ export default async function OpportunitiesPage({
   if (!user) redirect('/login')
 
   const userId = user.id
-  const status = searchParams.status || 'QUEUED'
-  const take = 50
+  const initialStatus = (searchParams.status || 'QUEUED') as string
 
-  const product = await prisma.product.findFirst({
-    where: { userId, isActive: true },
-    select: { id: true, name: true },
-    orderBy: { createdAt: 'asc' },
-  })
-
-  const where: any = {
-    product: { userId },
-    status,
-  }
-
-  const [opportunities, total] = await Promise.all([
+  const [product, allOpportunities] = await Promise.all([
+    prisma.product.findFirst({
+      where: { userId, isActive: true },
+      select: { id: true, name: true },
+      orderBy: { createdAt: 'asc' },
+    }),
     prisma.opportunity.findMany({
-      where,
+      where: { product: { userId } },
       orderBy: { intentScore: 'desc' },
-      take,
+      take: 200,
       include: {
-        subreddit: { select: { name: true } },
+        subreddit: { select: { name: true, allowsPromotion: true, rulesScannedAt: true } },
         replies: {
           where: { isActive: true },
           take: 1,
@@ -42,16 +35,21 @@ export default async function OpportunitiesPage({
         product: { select: { id: true, name: true } },
       },
     }),
-    prisma.opportunity.count({ where }),
   ])
 
+  const counts = {
+    queued:  allOpportunities.filter(o => o.status === 'QUEUED').length,
+    posted:  allOpportunities.filter(o => o.status === 'POSTED').length,
+    skipped: allOpportunities.filter(o => o.status === 'SKIPPED').length,
+  }
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+    <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <InboxView
-        opportunities={opportunities as any}
-        total={total}
-        currentStatus={status}
+        opportunities={allOpportunities as any}
+        initialStatus={initialStatus}
         productName={product?.name ?? 'Your product'}
+        counts={counts}
       />
     </div>
   )

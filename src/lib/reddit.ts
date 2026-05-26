@@ -22,14 +22,12 @@ export interface RedditThread {
 
 export async function fetchNewThreads(
   subredditName: string,
-  limit = 25
+  limit = 25,
+  skipComments = false
 ): Promise<RedditThread[]> {
   const res = await fetch(
     `https://www.reddit.com/r/${subredditName}/new.json?limit=${limit}`,
-    {
-      headers: { 'User-Agent': USER_AGENT },
-      next: { revalidate: 0 },
-    }
+    { headers: { 'User-Agent': USER_AGENT }, next: { revalidate: 0 } }
   )
 
   if (!res.ok) {
@@ -41,24 +39,25 @@ export async function fetchNewThreads(
   const data = await res.json()
   const posts: any[] = data?.data?.children?.map((c: any) => c.data) ?? []
 
-  // For each post, fetch top comments via public JSON
   const threads = await Promise.all(
     posts.slice(0, limit).map(async (post): Promise<RedditThread> => {
       let comments: string[] = []
-      try {
-        const commentsRes = await fetch(
-          `https://www.reddit.com/r/${subredditName}/comments/${post.id}.json?limit=3&depth=1`,
-          { headers: { 'User-Agent': USER_AGENT }, next: { revalidate: 0 } }
-        )
-        if (commentsRes.ok) {
-          const cd = await commentsRes.json()
-          const listing = cd?.[1]?.data?.children ?? []
-          comments = listing
-            .filter((c: any) => c.kind === 't1' && c.data?.body)
-            .slice(0, 3)
-            .map((c: any) => c.data.body as string)
-        }
-      } catch { /* non-fatal */ }
+      if (!skipComments) {
+        try {
+          const commentsRes = await fetch(
+            `https://www.reddit.com/r/${subredditName}/comments/${post.id}.json?limit=3&depth=1`,
+            { headers: { 'User-Agent': USER_AGENT }, next: { revalidate: 0 } }
+          )
+          if (commentsRes.ok) {
+            const cd = await commentsRes.json()
+            const listing = cd?.[1]?.data?.children ?? []
+            comments = listing
+              .filter((c: any) => c.kind === 't1' && c.data?.body)
+              .slice(0, 3)
+              .map((c: any) => c.data.body as string)
+          }
+        } catch { /* non-fatal */ }
+      }
 
       return {
         id: post.id,
@@ -75,6 +74,161 @@ export async function fetchNewThreads(
   )
 
   return threads
+}
+
+// ─── Hot Threads ─────────────────────────────────────────────────────────────
+
+export async function fetchHotThreads(
+  subredditName: string,
+  limit = 25,
+  skipComments = false
+): Promise<RedditThread[]> {
+  const res = await fetch(
+    `https://www.reddit.com/r/${subredditName}/hot.json?limit=${limit}`,
+    { headers: { 'User-Agent': USER_AGENT }, next: { revalidate: 0 } }
+  )
+  if (!res.ok) return []
+  const data = await res.json()
+  const posts: any[] = data?.data?.children?.map((c: any) => c.data) ?? []
+  return Promise.all(
+    posts.slice(0, limit).map(async (post): Promise<RedditThread> => {
+      let comments: string[] = []
+      if (!skipComments) {
+        try {
+          const cr = await fetch(
+            `https://www.reddit.com/r/${subredditName}/comments/${post.id}.json?limit=3&depth=1`,
+            { headers: { 'User-Agent': USER_AGENT }, next: { revalidate: 0 } }
+          )
+          if (cr.ok) {
+            const cd = await cr.json()
+            comments = (cd?.[1]?.data?.children ?? [])
+              .filter((c: any) => c.kind === 't1' && c.data?.body)
+              .slice(0, 3)
+              .map((c: any) => c.data.body as string)
+          }
+        } catch { /* non-fatal */ }
+      }
+      return {
+        id: post.id,
+        url: `https://reddit.com${post.permalink}`,
+        title: post.title,
+        selftext: post.selftext || '',
+        author: post.author || '[deleted]',
+        score: post.score ?? 0,
+        num_comments: post.num_comments ?? 0,
+        created_utc: post.created_utc,
+        comments,
+      }
+    })
+  )
+}
+
+// ─── Top Threads (past week) ──────────────────────────────────────────────────
+
+export async function fetchTopThreads(
+  subredditName: string,
+  limit = 25,
+  time: 'day' | 'week' = 'week',
+  skipComments = false
+): Promise<RedditThread[]> {
+  const res = await fetch(
+    `https://www.reddit.com/r/${subredditName}/top.json?limit=${limit}&t=${time}`,
+    { headers: { 'User-Agent': USER_AGENT }, next: { revalidate: 0 } }
+  )
+  if (!res.ok) return []
+  const data = await res.json()
+  const posts: any[] = data?.data?.children?.map((c: any) => c.data) ?? []
+  return Promise.all(
+    posts.slice(0, limit).map(async (post): Promise<RedditThread> => {
+      let comments: string[] = []
+      if (!skipComments) {
+        try {
+          const cr = await fetch(
+            `https://www.reddit.com/r/${subredditName}/comments/${post.id}.json?limit=3&depth=1`,
+            { headers: { 'User-Agent': USER_AGENT }, next: { revalidate: 0 } }
+          )
+          if (cr.ok) {
+            const cd = await cr.json()
+            comments = (cd?.[1]?.data?.children ?? [])
+              .filter((c: any) => c.kind === 't1' && c.data?.body)
+              .slice(0, 3)
+              .map((c: any) => c.data.body as string)
+          }
+        } catch { /* non-fatal */ }
+      }
+      return {
+        id: post.id,
+        url: `https://reddit.com${post.permalink}`,
+        title: post.title,
+        selftext: post.selftext || '',
+        author: post.author || '[deleted]',
+        score: post.score ?? 0,
+        num_comments: post.num_comments ?? 0,
+        created_utc: post.created_utc,
+        comments,
+      }
+    })
+  )
+}
+
+// ─── Recent Comment Threads ───────────────────────────────────────────────────
+// Scans the subreddit's comment stream and returns the parent posts of
+// recent comments — catches active discussions in older threads.
+
+export async function fetchRecentCommentThreads(
+  subredditName: string,
+  limit = 15
+): Promise<RedditThread[]> {
+  const res = await fetch(
+    `https://www.reddit.com/r/${subredditName}/comments.json?limit=${limit}`,
+    {
+      headers: { 'User-Agent': USER_AGENT },
+      next: { revalidate: 0 },
+    }
+  )
+  if (!res.ok) return []
+
+  const data = await res.json()
+  const comments: any[] = data?.data?.children?.map((c: any) => c.data) ?? []
+
+  // Get unique parent post IDs from these comments
+  const postIds = [...new Set(comments.map((c: any) => c.link_id?.replace('t3_', '')).filter(Boolean))]
+
+  // Fetch post details for unique threads
+  const threadMap = new Map<string, RedditThread>()
+  await Promise.allSettled(
+    postIds.slice(0, 8).map(async (postId) => {
+      try {
+        const postRes = await fetch(
+          `https://www.reddit.com/r/${subredditName}/comments/${postId}.json?limit=3&depth=1`,
+          { headers: { 'User-Agent': USER_AGENT }, next: { revalidate: 0 } }
+        )
+        if (!postRes.ok) return
+        const pd = await postRes.json()
+        const post = pd?.[0]?.data?.children?.[0]?.data
+        if (!post) return
+        const commentListing = pd?.[1]?.data?.children ?? []
+        const topComments = commentListing
+          .filter((c: any) => c.kind === 't1' && c.data?.body)
+          .slice(0, 3)
+          .map((c: any) => c.data.body as string)
+
+        threadMap.set(postId, {
+          id: post.id,
+          url: `https://reddit.com${post.permalink}`,
+          title: post.title,
+          selftext: post.selftext || '',
+          author: post.author || '[deleted]',
+          score: post.score ?? 0,
+          num_comments: post.num_comments ?? 0,
+          created_utc: post.created_utc,
+          comments: topComments,
+        })
+      } catch { /* skip */ }
+    })
+  )
+
+  return [...threadMap.values()]
 }
 
 // ─── Client Factory (for posting — requires user OAuth) ───────────────────────

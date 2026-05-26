@@ -127,8 +127,12 @@ export async function generateReply(
   thread: { title: string; body: string; subreddit: string },
   product: ProductProfile,
   painType: PainType,
-  shouldPitch: boolean
+  shouldPitch: boolean,
+  // Override: when the user explicitly toggles the pitch on/off in the UI
+  includePitchOverride?: boolean
 ): Promise<ReplyResult> {
+  const pitch = includePitchOverride !== undefined ? includePitchOverride : shouldPitch
+
   const toneInstructions: Record<PainType, string> = {
     competitor_frustration: 'Acknowledge their frustration with the competitor first. Be empathetic. Only mention the product after validating their pain. Never trash the competitor directly.',
     switching_intent: 'Be direct and helpful. They are ready to switch — give them a clear, confident recommendation with a soft CTA. No fluff.',
@@ -137,9 +141,9 @@ export async function generateReply(
     workflow_pain: 'Empathise with the workflow struggle. Explain how the product solves this specific pain point. Keep it conversational.',
   }
 
-  const pitchInstruction = shouldPitch
-    ? 'You MAY mention the product URL naturally at the end if it fits.'
-    : 'Do NOT mention the product or any URL. Write a purely helpful, empathetic reply that builds goodwill. No pitch.'
+  const pitchInstruction = pitch
+    ? `You MUST naturally mention the product at the end using a Reddit markdown link, like: "Here's what I use — [${product.name}](${product.url})". Make it feel like a personal recommendation, not an ad. Lead with the helpful reply first.`
+    : 'Do NOT mention the product or any URL. Write a purely helpful, empathetic reply that builds goodwill. No pitch at all.'
 
   const response = await client.messages.create({
     model: 'claude-sonnet-4-20250514',
@@ -149,6 +153,7 @@ export async function generateReply(
       content: `You are writing a Reddit reply on behalf of a founder. The reply must sound like a real human, not a marketer.
 
 PRODUCT: ${product.name}
+PRODUCT URL: ${product.url}
 PRODUCT SUMMARY: ${product.summary}
 
 SUBREDDIT: r/${thread.subreddit}
@@ -163,10 +168,11 @@ STRICT RULES:
 - Never start with the product name
 - Never use phrases like "I'd recommend", "You should check out", "As a [job title]"
 - Never use bullet points unless the thread specifically warrants a list
-- Max 120 words unless a longer reply would genuinely help
+- Max 140 words unless a longer reply would genuinely help
 - Match the casual/professional tone of r/${thread.subreddit}
 - Sound like a peer, not a marketer
 - Vary the opening — never start with "I've been in your exact situation"
+- If including the product link, use Reddit markdown: [Product Name](url)
 
 Return ONLY valid JSON, no markdown:
 {
@@ -179,6 +185,55 @@ Return ONLY valid JSON, no markdown:
 
   const text = response.content[0].type === 'text' ? response.content[0].text : ''
   return JSON.parse(text) as ReplyResult
+}
+
+// ─── Comment Reply Generator ─────────────────────────────────────────────────
+
+export async function generateCommentReply(
+  thread: { title: string; subreddit: string },
+  comment: { author: string; body: string },
+  product: ProductProfile,
+  shouldPitch: boolean
+): Promise<{ text: string; whyThisWorks: string }> {
+  const pitchInstruction = shouldPitch
+    ? `You MAY naturally mention the product at the end if it genuinely fits: "[${product.name}](${product.url})". Only include it if the comment creates an opening — do not force it.`
+    : 'Do NOT mention the product or any URL. Write a purely helpful, empathetic reply that adds value.'
+
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 500,
+    messages: [{
+      role: 'user',
+      content: `You are writing a Reddit comment reply on behalf of a founder. Sound like a real human in a conversation — not a marketer.
+
+PRODUCT: ${product.name}
+PRODUCT SUMMARY: ${product.summary}
+
+SUBREDDIT: r/${thread.subreddit}
+THREAD TITLE: ${thread.title}
+
+COMMENT TO REPLY TO (by u/${comment.author}):
+"${comment.body}"
+
+PITCH RULE: ${pitchInstruction}
+
+RULES:
+- Directly address what u/${comment.author} said — don't ignore their specific point
+- Keep it conversational and short (50–100 words)
+- Never start with "Great point" or "Absolutely" or sycophantic openers
+- Sound like a peer responding in a thread, not a brand
+- Match the tone of r/${thread.subreddit}
+
+Return ONLY valid JSON, no markdown:
+{
+  "text": "the reply text",
+  "whyThisWorks": "1 sentence on why this reply works for this specific comment"
+}`
+    }]
+  })
+
+  const raw = response.content[0].type === 'text' ? response.content[0].text : ''
+  return JSON.parse(raw) as { text: string; whyThisWorks: string }
 }
 
 // ─── Keyword Suggestions ─────────────────────────────────────────────────────
@@ -211,6 +266,71 @@ Rules:
 }
 
 // ─── Warmup Comment Generation ────────────────────────────────────────────────
+
+// ─── GEO Analysis ────────────────────────────────────────────────────────────
+
+export interface GeoAnalysis {
+  geoScore: number
+  summary: string
+  dimensions: Record<string, { score: number; label: string; insight: string }>
+  redditStrategy: { subreddit: string; reason: string; action: string }[]
+  contentIdeas: { title: string; subreddit: string; type: string; why: string }[]
+  competitorComparison: { name: string; estimatedGeoScore: number; gap: string }[]
+  quickWins: string[]
+}
+
+export async function runGeoAnalysis(product: {
+  name: string; url: string; description: string;
+  targetAudience: string; keyBenefits: unknown; competitors: unknown;
+}): Promise<GeoAnalysis> {
+  const keyBenefits = Array.isArray(product.keyBenefits) ? (product.keyBenefits as string[]).join(', ') : String(product.keyBenefits ?? '')
+  const competitors = Array.isArray(product.competitors) ? (product.competitors as string[]).join(', ') : String(product.competitors ?? '')
+
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 1800,
+    messages: [{
+      role: 'user',
+      content: `You are a Generative Engine Optimization (GEO) expert. Analyze how well this product is positioned to appear in AI-generated answers (ChatGPT, Claude, Gemini, Perplexity).
+
+PRODUCT NAME: ${product.name}
+PRODUCT URL: ${product.url}
+DESCRIPTION: ${product.description ?? ''}
+TARGET AUDIENCE: ${product.targetAudience ?? ''}
+KEY BENEFITS: ${keyBenefits || 'not specified'}
+COMPETITORS: ${competitors || 'none listed'}
+
+Analyze across 5 dimensions. Return ONLY valid JSON with NO markdown code fences:
+{
+  "geoScore": 42,
+  "summary": "two sentence assessment here",
+  "dimensions": {
+    "aiVisibility": { "score": 40, "label": "AI Visibility", "insight": "one sentence" },
+    "contentDepth": { "score": 35, "label": "Content Depth", "insight": "one sentence" },
+    "communityPresence": { "score": 50, "label": "Community Presence", "insight": "one sentence" },
+    "competitorGap": { "score": 45, "label": "Competitor Gap", "insight": "one sentence" },
+    "intentAlignment": { "score": 60, "label": "Intent Alignment", "insight": "one sentence" }
+  },
+  "redditStrategy": [
+    { "subreddit": "subredditname", "reason": "why this community helps GEO", "action": "specific angle to use" }
+  ],
+  "contentIdeas": [
+    { "title": "post title", "subreddit": "subredditname", "type": "post", "why": "why this improves AI visibility" }
+  ],
+  "competitorComparison": [
+    { "name": "competitor", "estimatedGeoScore": 60, "gap": "what they do better or worse" }
+  ],
+  "quickWins": ["action 1", "action 2", "action 3"]
+}
+
+Rules: redditStrategy 3-5 items, contentIdeas 3-4 items, competitorComparison 2-3 items. Output raw JSON only, absolutely no markdown.`
+    }]
+  })
+
+  const raw = response.content[0].type === 'text' ? response.content[0].text : ''
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
+  return JSON.parse(cleaned) as GeoAnalysis
+}
 
 export async function generateWarmupComment(
   thread: { title: string; body: string; subreddit: string }

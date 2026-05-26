@@ -29,15 +29,23 @@ export default async function ProductsPage() {
     prisma.user.findUnique({ where: { id: user.id }, select: { plan: true } }),
   ])
 
-  const plan = dbUser?.plan ?? 'STARTER'
-  const isFreePlan = plan === 'STARTER'
+  const plan = dbUser?.plan ?? 'FREE'
+  const PRODUCT_LIMITS: Record<string, number> = { FREE: 1, STARTER: 3, GROWTH: 5 }
+  const productLimit = PRODUCT_LIMITS[plan] ?? 1
+  const atLimit = products.length >= productLimit
+  const upgradeTarget = plan === 'FREE' ? 'Starter' : 'Growth'
+
+  // Upgrade message copy per plan
+  const upgradeMsg = plan === 'FREE'
+    ? 'Upgrade to Starter to track up to 3 products.'
+    : 'Upgrade to Growth to track up to 5 products.'
 
   // Aggregate stats
   const totalSubreddits = products.reduce((sum, p) => sum + p._count.subreddits, 0)
   const totalOpportunities = products.reduce((sum, p) => sum + p._count.opportunities, 0)
 
   const statsStrip = [
-    { label: 'Products', value: products.length, max: isFreePlan ? 1 : null },
+    { label: 'Products', value: products.length, max: productLimit },
     { label: 'Subreddits watched', value: totalSubreddits, delta: null },
     { label: 'Threads found', value: totalOpportunities, delta: null },
     { label: 'Replies copied', value: 0, delta: null },
@@ -56,7 +64,7 @@ export default async function ProductsPage() {
             Manage your product profiles and subreddit watchlists.
           </p>
         </div>
-        {(!isFreePlan || products.length === 0) && (
+        {(!atLimit || products.length === 0) && (
           <Link
             href="/onboarding"
             style={{
@@ -145,41 +153,58 @@ export default async function ProductsPage() {
             />
           ))}
 
-          {/* Locked add-another slot for free plan */}
-          {isFreePlan && (
-            <div style={{
-              background: S.panel, borderRadius: 14,
-              border: `1.5px dashed ${S.line3}`,
-              padding: '20px 24px',
-              display: 'flex', alignItems: 'center', gap: 14, opacity: .7,
-            }}>
-              <div style={{
-                width: 44, height: 44, borderRadius: 10, background: S.panel2,
-                border: `1px dashed ${S.line3}`, display: 'flex', alignItems: 'center',
-                justifyContent: 'center', flexShrink: 0,
+          {/* Add-product slots up to plan limit */}
+          {Array.from({ length: Math.max(0, productLimit - products.length) }).map((_, i) => (
+            atLimit || plan !== 'FREE' ? (
+              // Paid plan — show active add button
+              <a key={`add-${i}`} href="/products/new" style={{
+                background: S.panel, borderRadius: 14,
+                border: `1.5px dashed ${S.line2}`,
+                padding: '20px 24px', textDecoration: 'none',
+                display: 'flex', alignItems: 'center', gap: 14,
+                transition: 'border-color .15s',
               }}>
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <path d="M8 3v10M3 8h10" stroke={S.text4} strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
-              </div>
-              <div style={{ flex: 1 }}>
-                <p style={{ fontSize: 16, fontWeight: 600, color: S.text3, margin: '0 0 2px' }}>
-                  Add another product
-                </p>
-                <p style={{ fontSize: 15, color: S.text4, margin: 0 }}>
-                  Upgrade to Growth to track multiple products.
-                </p>
-              </div>
-              <span style={{
-                fontSize: 14, fontWeight: 700, padding: '4px 10px', borderRadius: 6,
-                background: S.amberSoft, color: S.amber,
-                fontFamily: 'JetBrains Mono, monospace', letterSpacing: '.04em',
-                border: `1px solid rgba(229,160,74,.3)`,
+                <div style={{
+                  width: 44, height: 44, borderRadius: 10, background: S.panel2,
+                  border: `1px dashed ${S.line2}`, display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', flexShrink: 0,
+                }}>
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M8 3v10M3 8h10" stroke={S.text3} strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                </div>
+                <p style={{ fontSize: 15, fontWeight: 500, color: S.text3, margin: 0 }}>Add product</p>
+              </a>
+            ) : (
+              // Free plan — locked slot
+              <div key={`locked-${i}`} style={{
+                background: S.panel, borderRadius: 14,
+                border: `1.5px dashed ${S.line3}`,
+                padding: '20px 24px',
+                display: 'flex', alignItems: 'center', gap: 14, opacity: .65,
               }}>
-                UPGRADE
-              </span>
-            </div>
-          )}
+                <div style={{
+                  width: 44, height: 44, borderRadius: 10, background: S.panel2,
+                  border: `1px dashed ${S.line3}`, display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', flexShrink: 0,
+                }}>
+                  <svg width="15" height="15" fill="none" stroke={S.text4} strokeWidth="1.8" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: 15, fontWeight: 600, color: S.text3, margin: '0 0 2px' }}>Add another product</p>
+                  <p style={{ fontSize: 13.5, color: S.text4, margin: 0 }}>{upgradeMsg}</p>
+                </div>
+                <a href="/settings" style={{
+                  fontSize: 12, fontWeight: 700, padding: '5px 11px', borderRadius: 6,
+                  background: S.amberSoft, color: S.amber, textDecoration: 'none',
+                  fontFamily: 'JetBrains Mono, monospace', letterSpacing: '.04em',
+                  border: `1px solid rgba(229,160,74,.3)`,
+                }}>
+                  UPGRADE
+                </a>
+              </div>
+            )
+          ))}
         </div>
       )}
     </div>

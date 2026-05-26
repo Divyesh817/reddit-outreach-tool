@@ -1,11 +1,14 @@
 // src/lib/inngest.ts
 import { Inngest } from 'inngest'
+import { Resend } from 'resend'
 import { prisma } from '@/lib/prisma'
 import { fetchNewThreads, checkDailyPostingLimit, checkSubredditCooldown,
          checkShadowban, checkCommentVisible, fetchSubredditRules,
          fetchAccountKarma, postReply } from '@/lib/reddit'
-import { scoreOpportunity, generateReply, generateWarmupComment } from '@/lib/anthropic'
+import { scoreOpportunity, generateReply, generateWarmupComment, runGeoAnalysis } from '@/lib/anthropic'
 import { SAFETY } from '@/types'
+
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 export const inngest = new Inngest({ id: 'reddit-outreach-tool' })
 
@@ -365,4 +368,110 @@ export const manualScan = inngest.createFunction(
   }
 )
 
-export const functions = [scanSubreddits, manualScan, postApprovedReplies, dailyWarmup, healthCheck]
+// ─── Job 6: Weekly GEO digest ─────────────────────────────────────────────────
+
+export const weeklyGeoDigest = inngest.createFunction(
+  { id: 'weekly-geo-digest', concurrency: { limit: 3 } },
+  { cron: '0 8 * * 1' }, // every Monday at 8am UTC
+  async ({ step }) => {
+    const products = await step.run('fetch-products', async () => {
+      return prisma.product.findMany({
+        where: { isActive: true },
+        include: { user: { select: { id: true, email: true, name: true } } },
+      })
+    })
+
+    // Compute Monday of current week
+    const now = new Date()
+    const dayOfWeek = now.getUTCDay()
+    const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+    const weekOf = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - daysToMonday))
+
+    let sent = 0
+
+    for (const product of products) {
+      await step.run(`geo-digest-${product.id}`, async () => {
+        let analysis
+        try {
+          analysis = await runGeoAnalysis(product)
+        } catch (e: any) {
+          console.error(`GEO weekly: analysis failed for ${product.name}:`, e?.message)
+          return
+        }
+
+        const report = await prisma.geoReport.create({
+          data: {
+            productId: product.id,
+            userId: product.user.id,
+            geoScore: analysis.geoScore,
+            analysis: analysis as object,
+            weekOf,
+          },
+        })
+
+        // Fetch score history for trend line in email
+        const history = await prisma.geoReport.findMany({
+          where: { productId: product.id },
+          orderBy: { createdAt: 'desc' },
+          take: 8,
+          select: { geoScore: true, createdAt: true },
+        })
+
+        const prevScore = history[1]?.geoScore
+        const delta = prevScore !== undefined ? analysis.geoScore - prevScore : null
+        const deltaStr = delta === null ? '' : delta > 0 ? ` (+${delta} vs last week)` : delta < 0 ? ` (${delta} vs last week)` : ' (no change)'
+
+        const scoreLabel = analysis.geoScore >= 75 ? 'STRONG' : analysis.geoScore >= 50 ? 'MODERATE' : 'WEAK'
+        const scoreColor = analysis.geoScore >= 75 ? '#4ADE80' : analysis.geoScore >= 50 ? '#FBBF24' : '#F87171'
+
+        const quickWinsHtml = analysis.quickWins?.map((w, i) =>
+          `<tr><td style="padding:10px 14px;border-bottom:1px solid #1E1E28;vertical-align:top">
+            <span style="font-family:monospace;font-size:11px;font-weight:700;color:#FF6B35;margin-right:10px">${i + 1}</span>
+            <span style="font-size:14px;color:#C4C4D0">${w}</span>
+          </td></tr>`
+        ).join('') ?? ''
+
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Weekly GEO Report</title></head>
+<body style="margin:0;padding:0;background:#0D0D10;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#E2E2E8">
+<div style="max-width:580px;margin:0 auto;padding:40px 24px">
+  <div style="text-align:center;margin-bottom:32px">
+    <div style="font-family:monospace;font-size:12px;color:#FF6B35;letter-spacing:.12em;font-weight:700;text-transform:uppercase;margin-bottom:16px">Redgrow · Weekly GEO Digest</div>
+    <h1 style="font-size:22px;font-weight:700;color:#F4F4F8;margin:0 0 6px;letter-spacing:-.02em">${product.name}</h1>
+    <p style="font-size:14px;color:#7C7C8A;margin:0">${new Date(weekOf).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+  </div>
+
+  <div style="background:#16161A;border:1px solid #2A2A35;border-radius:14px;padding:24px;margin-bottom:24px;text-align:center">
+    <div style="font-size:52px;font-weight:800;font-family:monospace;color:${scoreColor};line-height:1">${analysis.geoScore}</div>
+    <div style="display:inline-block;margin-top:8px;padding:4px 12px;border-radius:6px;font-size:11px;font-weight:700;letter-spacing:.08em;background:${analysis.geoScore >= 75 ? '#0A2318' : analysis.geoScore >= 50 ? '#231900' : '#200A0A'};color:${scoreColor}">${scoreLabel}${deltaStr}</div>
+    <p style="font-size:14px;color:#A8A8B8;line-height:1.6;margin:16px 0 0">${analysis.summary}</p>
+  </div>
+
+  ${quickWinsHtml ? `
+  <div style="margin-bottom:24px">
+    <div style="font-family:monospace;font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#55556A;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #1E1E28">This week's quick wins</div>
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#16161A;border:1px solid #1E1E28;border-radius:10px;overflow:hidden">${quickWinsHtml}</table>
+  </div>` : ''}
+
+  <div style="text-align:center;margin-top:32px;padding-top:24px;border-top:1px solid #1E1E28">
+    <a href="${process.env.NEXT_PUBLIC_APP_URL}/geo" style="display:inline-block;padding:12px 24px;border-radius:9px;background:#FF6B35;color:#fff;font-size:14px;font-weight:700;text-decoration:none">View full report →</a>
+    <p style="font-size:12px;color:#55556A;margin-top:16px">Redgrow GEO · Weekly digest every Monday</p>
+  </div>
+</div>
+</body></html>`
+
+        await resend.emails.send({
+          from: 'Redgrow GEO <div@redgrow.app>',
+          to: product.user.email,
+          subject: `Weekly GEO: ${product.name} scored ${analysis.geoScore}${deltaStr}`,
+          html,
+        })
+
+        sent++
+      })
+    }
+
+    return { sent }
+  }
+)
+
+export const functions = [scanSubreddits, manualScan, postApprovedReplies, dailyWarmup, healthCheck, weeklyGeoDigest]
