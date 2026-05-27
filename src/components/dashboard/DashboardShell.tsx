@@ -184,20 +184,21 @@ export function DashboardShell({ user, products, children, opportunityCount = 0,
               {/* Locked slots — FREE always gets 1, points to upgrade */}
               {Array.from({ length: lockedSlots }).map((_, i) => (
                 <div key={`locked-${i}`} style={{
-                  display: 'flex', alignItems: 'center', gap: 9,
                   padding: '7px 8px', borderRadius: 7,
                   border: `1px dashed ${S.line2}`, opacity: 0.65,
                 }}>
-                  <span style={{
-                    width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-                    background: S.line, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    <svg width="10" height="10" fill="none" stroke={S.text4} strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                  </span>
-                  <span style={{ flex: 1, fontSize: 12, color: S.text4 }}>Add product</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                    <span style={{
+                      width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                      background: S.line, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <svg width="10" height="10" fill="none" stroke={S.text4} strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    </span>
+                    <span style={{ fontSize: 12, color: S.text4 }}>Add product</span>
+                  </div>
                   {upgradeLabel && (
-                    <Link href="/settings" onClick={e => e.stopPropagation()} style={{ fontSize: 10.5, color: S.orange2, textDecoration: 'none', fontWeight: 600, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '.03em', whiteSpace: 'nowrap' }}>
-                      {upgradeLabel}
+                    <Link href="/settings" onClick={e => e.stopPropagation()} style={{ display: 'block', marginTop: 4, fontSize: 10.5, color: S.orange2, textDecoration: 'none', fontWeight: 600, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '.03em' }}>
+                      {upgradeLabel} →
                     </Link>
                   )}
                 </div>

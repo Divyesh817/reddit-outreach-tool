@@ -118,6 +118,12 @@ export default function AdminPanel() {
       <div style={s.header}>
         <span style={s.logo}><span style={s.dot} />Redgrow</span>
         <span style={s.badge}>Admin</span>
+        <a
+          href="/dashboard"
+          style={{ marginLeft: 'auto', padding: '7px 16px', background: '#222', color: '#f5f5f5', border: '1px solid #333', borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: 'none' }}
+        >
+          Go to app →
+        </a>
       </div>
 
       <div style={s.tabs}>
@@ -149,7 +155,8 @@ function EmailsTab() {
   const [previewMode, setPreviewMode] = useState<'code' | 'preview'>('code')
 
   useEffect(() => {
-    fetch('/api/admin/email-templates').then(r => r.json()).then((t: EmailTemplate[]) => {
+    fetch('/api/admin/email-templates').then(r => r.json()).then((t: unknown) => {
+      if (!Array.isArray(t)) return
       setTemplates(t)
       if (t.length > 0) select(t[0])
     })
@@ -435,7 +442,8 @@ function PromptsTab() {
   const [msg, setMsg] = useState('')
 
   useEffect(() => {
-    fetch('/api/admin/prompts').then(r => r.json()).then((p: AiPrompt[]) => {
+    fetch('/api/admin/prompts').then(r => r.json()).then((p: unknown) => {
+      if (!Array.isArray(p)) return
       setPrompts(p)
       if (p.length > 0) select(p[0])
     })

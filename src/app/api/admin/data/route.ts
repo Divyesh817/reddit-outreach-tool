@@ -29,8 +29,22 @@ async function getDodoStats() {
       ? await subsRes.value.json()
       : { items: [] }
 
-    const paymentList: any[] = payments.items ?? []
-    const subList: any[] = subs.items ?? []
+    // Filter to Redgrow product IDs only
+    const redgrowProductIds = new Set([
+      process.env.DODO_STARTER_PRODUCT_ID,
+      process.env.DODO_GROWTH_PRODUCT_ID,
+    ].filter(Boolean))
+
+    const allPayments: any[] = payments.items ?? []
+    const allSubs: any[] = subs.items ?? []
+
+    const paymentList = redgrowProductIds.size > 0
+      ? allPayments.filter((p: any) => redgrowProductIds.has(p.product_id))
+      : allPayments
+
+    const subList = redgrowProductIds.size > 0
+      ? allSubs.filter((s: any) => redgrowProductIds.has(s.product_id))
+      : allSubs
 
     const totalRevenue = paymentList
       .filter((p: any) => p.status === 'succeeded')

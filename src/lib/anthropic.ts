@@ -184,7 +184,45 @@ Return ONLY valid JSON, no markdown:
   })
 
   const text = response.content[0].type === 'text' ? response.content[0].text : ''
-  return JSON.parse(text) as ReplyResult
+  const result = JSON.parse(text) as ReplyResult
+  result.text = await humaniseReply(result.text, thread.subreddit)
+  return result
+}
+
+// ─── Humanising Filter ───────────────────────────────────────────────────────
+
+async function humaniseReply(text: string, subreddit: string): Promise<string> {
+  try {
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 300,
+      messages: [{
+        role: 'user',
+        content: `You are editing a Reddit reply to make it sound like a real person typed it quickly, not an AI.
+
+SUBREDDIT: r/${subreddit}
+ORIGINAL REPLY:
+${text}
+
+EDITING RULES:
+- Target 50–90 words. Cut ruthlessly — remove any sentence that doesn't add real value
+- Use contractions everywhere (don't, it's, you're, can't, I've)
+- Remove: "certainly", "absolutely", "I understand", "great question", "I hope this helps", "feel free to", "I would suggest", "it's worth noting", "essentially", "ultimately"
+- No bullet points or numbered lists unless the original had them for a structural reason
+- No multi-paragraph walls of text — 1-2 short paragraphs max
+- Keep any product links exactly as they are ([Name](url) format)
+- If the reply starts with "I", rewrite the opening so it doesn't
+- Add one small natural imperfection if appropriate (a casual phrase, an em dash, a "tbh", "honestly", "ngl") — but only if it fits
+- Do NOT change the core message, advice, or any facts
+
+Return ONLY the edited reply text. No explanation, no JSON, just the reply.`
+      }]
+    })
+    const edited = response.content[0].type === 'text' ? response.content[0].text.trim() : text
+    return edited || text
+  } catch {
+    return text
+  }
 }
 
 // ─── Comment Reply Generator ─────────────────────────────────────────────────
@@ -233,7 +271,9 @@ Return ONLY valid JSON, no markdown:
   })
 
   const raw = response.content[0].type === 'text' ? response.content[0].text : ''
-  return JSON.parse(raw) as { text: string; whyThisWorks: string }
+  const result = JSON.parse(raw) as { text: string; whyThisWorks: string }
+  result.text = await humaniseReply(result.text, thread.subreddit)
+  return result
 }
 
 // ─── Keyword Suggestions ─────────────────────────────────────────────────────
