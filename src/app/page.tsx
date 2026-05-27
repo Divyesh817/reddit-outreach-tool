@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     title: 'Redgrow — Find High-Intent Reddit Leads & Show Up in AI Search',
     description: 'AI scans Reddit 24/7 for warm leads. Copy the reply draft, paste it yourself. No auto-posting, no ban risk. From $9/mo.',
     type: 'website',
-    images: [{ url: '/og-image.png', width: 1200, height: 630 }],
+    images: [{ url: 'https://redgrow.app/og-image.png', width: 1200, height: 628 }],
   },
   twitter: {
     card: 'summary_large_image',
