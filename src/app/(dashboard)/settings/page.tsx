@@ -13,7 +13,7 @@ const DEFAULT_NOTIF_PREFS = {
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: { success?: string; error?: string }
+  searchParams: { success?: string; error?: string; tab?: string }
 }) {
   const supabase = createClient()
   const { data: { user: authUser } } = await supabase.auth.getUser()
@@ -44,8 +44,12 @@ export default async function SettingsPage({
     ...((user?.notificationPrefs as object) ?? {}),
   }
 
+  const validTabs = ['account', 'billing', 'notifications', 'danger']
+  const initialTab = validTabs.includes(searchParams.tab ?? '') ? searchParams.tab as 'account' | 'billing' | 'notifications' | 'danger' : 'account'
+
   return (
     <SettingsContent
+      initialTab={initialTab}
       user={{
         name: user?.name ?? null,
         email: user?.email ?? null,

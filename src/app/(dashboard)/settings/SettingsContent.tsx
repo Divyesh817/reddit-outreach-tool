@@ -28,6 +28,7 @@ interface Props {
   repliesThisMonth: number
   notifPrefs: NotifPrefs
   banner?: { ok: boolean; text: string } | null
+  initialTab?: Tab
 }
 
 type Tab = 'account' | 'billing' | 'notifications' | 'danger'
@@ -45,8 +46,8 @@ const PLAN_DISPLAY: Record<string, { label: string; price: string }> = {
   GROWTH:  { label: 'Growth',  price: '$19/mo' },
 }
 
-export function SettingsContent({ user, oppsThisMonth, repliesThisMonth, notifPrefs, banner }: Props) {
-  const [tab, setTab] = useState<Tab>('account')
+export function SettingsContent({ user, oppsThisMonth, repliesThisMonth, notifPrefs, banner, initialTab = 'account' }: Props) {
+  const [tab, setTab] = useState<Tab>(initialTab)
   const plan = user.plan as Plan
   const limits = PLAN_LIMITS[plan] ?? PLAN_LIMITS['FREE']
   const planDisplay = PLAN_DISPLAY[plan] ?? PLAN_DISPLAY['FREE']

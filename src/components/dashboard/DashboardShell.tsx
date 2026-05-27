@@ -198,7 +198,7 @@ export function DashboardShell({ user, products, children, opportunityCount = 0,
                     <span style={{ fontSize: 12, color: S.text4 }}>Add product</span>
                   </div>
                   {upgradeLabel && (
-                    <Link href="/settings" onClick={e => e.stopPropagation()} style={{ display: 'block', marginTop: 4, fontSize: 10.5, color: S.orange2, textDecoration: 'none', fontWeight: 600, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '.03em' }}>
+                    <Link href="/settings?tab=billing" onClick={e => e.stopPropagation()} style={{ display: 'block', marginTop: 4, fontSize: 10.5, color: S.orange2, textDecoration: 'none', fontWeight: 600, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '.03em' }}>
                       {upgradeLabel} →
                     </Link>
                   )}

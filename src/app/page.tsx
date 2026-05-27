@@ -618,7 +618,7 @@ export default function LandingPage() {
             <h2>Simple pricing. No surprises.</h2>
             <p className="desc">Start free. Upgrade when it&apos;s paying for itself — which usually happens on the first lead.</p>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 20, maxWidth: 860, margin: '0 auto' }}>
+          <div className="pricing-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 20, maxWidth: 860, margin: '0 auto' }}>
             {/* Free */}
             <div className="reveal" style={{ borderRadius: 16, border: '1px solid var(--line)', background: 'var(--card)', padding: '28px 26px', display: 'flex', flexDirection: 'column', gap: 20 }}>
               <div>

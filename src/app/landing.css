@@ -645,6 +645,7 @@ footer.lp-footer { background: var(--cream); padding: 72px 0 32px; border-top: 1
   .faq-grid { grid-template-columns: 1fr }
   .foot-grid { grid-template-columns: 1fr 1fr; gap: 36px }
   .hero-side-label { display: none }
+  .pricing-grid { grid-template-columns: 1fr !important; max-width: 420px !important }
 }
 @media (max-width: 768px) {
   .lp section { padding: 80px 0 }
@@ -653,6 +654,29 @@ footer.lp-footer { background: var(--cream); padding: 72px 0 32px; border-top: 1
   .hamburger { display: inline-flex }
   .foot-grid { grid-template-columns: 1fr 1fr }
   .foot-bottom { flex-direction: column; gap: 14px; text-align: center }
+}
+@media (max-width: 540px) {
+  .wrap, .narrow { padding: 0 18px }
+  .hero { padding: 110px 0 64px }
+  .hero .sub { font-size: 18px }
+  .hero-ctas { flex-direction: column; align-items: flex-start }
+  .nav { width: calc(100% - 24px); top: 12px }
+  .nav-row { padding: 12px 18px }
+  .stats-grid { grid-template-columns: repeat(2,1fr) }
+  .stat .v { font-size: 56px }
+  .tl-row { grid-template-columns: 1fr; gap: 10px; padding: 32px 0 }
+  .tl-num { font-size: 48px }
+  .tl-mock { grid-column: auto; margin-top: 0 }
+  .f-text h3 { font-size: 34px }
+  .sr-grid { grid-template-columns: repeat(2,1fr) }
+  .chart-stats { grid-template-columns: repeat(2,1fr) }
+  .pq .marks { font-size: 80px }
+  .compare h3 { font-size: 24px }
+  .compare li { font-size: 15px }
+  .foot-grid { grid-template-columns: 1fr }
+  .pricing-grid { max-width: 100% !important }
+  .book-3d { width: 220px; height: 300px }
+  .trust-row { gap: 14px; font-size: 12px }
 }
 
 /* MOBILE SHEET */
