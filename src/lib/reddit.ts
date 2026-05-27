@@ -3,10 +3,10 @@ import Snoowrap from 'snoowrap'
 import { SAFETY } from '@/types'
 import { prisma } from '@/lib/prisma'
 
-const USER_AGENT = process.env.REDDIT_USER_AGENT || 'Redgrow/1.0.0 (by /u/redgrow_app)'
+const USER_AGENT = process.env.REDDIT_USER_AGENT || 'Redgrow/1.0 (by /u/PastReaction341)'
+const REDDIT_HEADERS = { 'User-Agent': USER_AGENT }
 
-// ─── Public (no-auth) Thread Fetching ────────────────────────────────────────
-// Uses Reddit's public JSON API — no account, no OAuth, zero ban risk.
+// ─── Public thread fetching ───────────────────────────────────────────────────
 
 export interface RedditThread {
   id: string
@@ -27,67 +27,13 @@ export async function fetchNewThreads(
 ): Promise<RedditThread[]> {
   const res = await fetch(
     `https://www.reddit.com/r/${subredditName}/new.json?limit=${limit}`,
-    { headers: { 'User-Agent': USER_AGENT }, next: { revalidate: 0 } }
+    { headers: REDDIT_HEADERS, next: { revalidate: 0 } }
   )
-
   if (!res.ok) {
     if (res.status === 404) throw new Error(`r/${subredditName} not found`)
     if (res.status === 403) throw new Error(`r/${subredditName} is private`)
     throw new Error(`Reddit API error ${res.status}`)
   }
-
-  const data = await res.json()
-  const posts: any[] = data?.data?.children?.map((c: any) => c.data) ?? []
-
-  const threads = await Promise.all(
-    posts.slice(0, limit).map(async (post): Promise<RedditThread> => {
-      let comments: string[] = []
-      if (!skipComments) {
-        try {
-          const commentsRes = await fetch(
-            `https://www.reddit.com/r/${subredditName}/comments/${post.id}.json?limit=3&depth=1`,
-            { headers: { 'User-Agent': USER_AGENT }, next: { revalidate: 0 } }
-          )
-          if (commentsRes.ok) {
-            const cd = await commentsRes.json()
-            const listing = cd?.[1]?.data?.children ?? []
-            comments = listing
-              .filter((c: any) => c.kind === 't1' && c.data?.body)
-              .slice(0, 3)
-              .map((c: any) => c.data.body as string)
-          }
-        } catch { /* non-fatal */ }
-      }
-
-      return {
-        id: post.id,
-        url: `https://reddit.com${post.permalink}`,
-        title: post.title,
-        selftext: post.selftext || '',
-        author: post.author || '[deleted]',
-        score: post.score ?? 0,
-        num_comments: post.num_comments ?? 0,
-        created_utc: post.created_utc,
-        comments,
-      }
-    })
-  )
-
-  return threads
-}
-
-// ─── Hot Threads ─────────────────────────────────────────────────────────────
-
-export async function fetchHotThreads(
-  subredditName: string,
-  limit = 25,
-  skipComments = false
-): Promise<RedditThread[]> {
-  const res = await fetch(
-    `https://www.reddit.com/r/${subredditName}/hot.json?limit=${limit}`,
-    { headers: { 'User-Agent': USER_AGENT }, next: { revalidate: 0 } }
-  )
-  if (!res.ok) return []
   const data = await res.json()
   const posts: any[] = data?.data?.children?.map((c: any) => c.data) ?? []
   return Promise.all(
@@ -97,7 +43,7 @@ export async function fetchHotThreads(
         try {
           const cr = await fetch(
             `https://www.reddit.com/r/${subredditName}/comments/${post.id}.json?limit=3&depth=1`,
-            { headers: { 'User-Agent': USER_AGENT }, next: { revalidate: 0 } }
+            { headers: REDDIT_HEADERS, next: { revalidate: 0 } }
           )
           if (cr.ok) {
             const cd = await cr.json()
@@ -123,17 +69,14 @@ export async function fetchHotThreads(
   )
 }
 
-// ─── Top Threads (past week) ──────────────────────────────────────────────────
-
-export async function fetchTopThreads(
+export async function fetchHotThreads(
   subredditName: string,
   limit = 25,
-  time: 'day' | 'week' = 'week',
   skipComments = false
 ): Promise<RedditThread[]> {
   const res = await fetch(
-    `https://www.reddit.com/r/${subredditName}/top.json?limit=${limit}&t=${time}`,
-    { headers: { 'User-Agent': USER_AGENT }, next: { revalidate: 0 } }
+    `https://www.reddit.com/r/${subredditName}/hot.json?limit=${limit}`,
+    { headers: REDDIT_HEADERS, next: { revalidate: 0 } }
   )
   if (!res.ok) return []
   const data = await res.json()
@@ -145,7 +88,53 @@ export async function fetchTopThreads(
         try {
           const cr = await fetch(
             `https://www.reddit.com/r/${subredditName}/comments/${post.id}.json?limit=3&depth=1`,
-            { headers: { 'User-Agent': USER_AGENT }, next: { revalidate: 0 } }
+            { headers: REDDIT_HEADERS, next: { revalidate: 0 } }
+          )
+          if (cr.ok) {
+            const cd = await cr.json()
+            comments = (cd?.[1]?.data?.children ?? [])
+              .filter((c: any) => c.kind === 't1' && c.data?.body)
+              .slice(0, 3)
+              .map((c: any) => c.data.body as string)
+          }
+        } catch { /* non-fatal */ }
+      }
+      return {
+        id: post.id,
+        url: `https://reddit.com${post.permalink}`,
+        title: post.title,
+        selftext: post.selftext || '',
+        author: post.author || '[deleted]',
+        score: post.score ?? 0,
+        num_comments: post.num_comments ?? 0,
+        created_utc: post.created_utc,
+        comments,
+      }
+    })
+  )
+}
+
+export async function fetchTopThreads(
+  subredditName: string,
+  limit = 25,
+  time: 'day' | 'week' = 'week',
+  skipComments = false
+): Promise<RedditThread[]> {
+  const res = await fetch(
+    `https://www.reddit.com/r/${subredditName}/top.json?limit=${limit}&t=${time}`,
+    { headers: REDDIT_HEADERS, next: { revalidate: 0 } }
+  )
+  if (!res.ok) return []
+  const data = await res.json()
+  const posts: any[] = data?.data?.children?.map((c: any) => c.data) ?? []
+  return Promise.all(
+    posts.slice(0, limit).map(async (post): Promise<RedditThread> => {
+      let comments: string[] = []
+      if (!skipComments) {
+        try {
+          const cr = await fetch(
+            `https://www.reddit.com/r/${subredditName}/comments/${post.id}.json?limit=3&depth=1`,
+            { headers: REDDIT_HEADERS, next: { revalidate: 0 } }
           )
           if (cr.ok) {
             const cd = await cr.json()
