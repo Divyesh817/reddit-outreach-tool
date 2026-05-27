@@ -245,9 +245,9 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
     setCommentsLoading(true)
     setCommentsError('')
     try {
-      const clean = url.split('?')[0].replace(/\/$/, '')
+      const clean = url.split('?')[0].replace(/\/$/, '').replace('https://reddit.com', 'https://www.reddit.com')
       const jsonUrl = `${clean}.json?limit=25&depth=1&raw_json=1`
-      const res = await fetch(jsonUrl)
+      const res = await fetch(jsonUrl, { headers: { 'Accept': 'application/json' } })
       if (!res.ok) throw new Error(`Reddit returned ${res.status}`)
       const data = await res.json()
       const children = data?.[1]?.data?.children ?? []
