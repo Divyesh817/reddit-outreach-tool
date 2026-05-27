@@ -1,13 +1,25 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginContent isSignup={false} />}>
+      <LoginPageInner />
+    </Suspense>
+  )
+}
+
+function LoginPageInner() {
   const searchParams = useSearchParams()
   const isSignup = searchParams.get('mode') === 'signup'
+  return <LoginContent isSignup={isSignup} />
+}
+
+function LoginContent({ isSignup }: { isSignup: boolean }) {
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const [loading, setLoading] = useState(false)
