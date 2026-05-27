@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { S, DARK_VARS, LIGHT_VARS } from '@/lib/theme'
 import { PLAN_LIMITS } from '@/types'
+import { SupportWidget } from '@/components/support/SupportWidget'
 
 interface Props {
   user: { name: string; email: string; avatarUrl: string | null; plan: string }
@@ -415,6 +416,9 @@ export function DashboardShell({ user, products, children, opportunityCount = 0,
         {/* Page content */}
         {children}
       </main>
+
+      {/* Support chat widget */}
+      <SupportWidget />
     </div>
   )
 }

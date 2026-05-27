@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import { SubredditList } from '@/components/products/SubredditList'
+import { KeywordsTab } from '@/components/products/KeywordsTab'
 import Link from 'next/link'
 import { S } from '@/lib/theme'
 
@@ -138,6 +139,12 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
           )}
         </div>
       </div>
+
+      {/* Keywords */}
+      <KeywordsTab
+        productId={product.id}
+        initialKeywords={product.keywords}
+      />
 
       {/* Subreddit watchlist */}
       <SubredditList

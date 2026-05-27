@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { url, profile, selectedSubreddits } = await req.json()
+  const { url, profile, selectedSubreddits, keywords } = await req.json()
   if (!url || !profile) return NextResponse.json({ error: 'Missing data' }, { status: 400 })
 
   // Ensure user exists in DB
@@ -28,6 +28,7 @@ export async function POST(req: NextRequest) {
       targetAudience: profile.targetAudience,
       keyBenefits: profile.keyBenefits || [],
       competitors: profile.competitors || [],
+      keywords: Array.isArray(keywords) ? keywords.slice(0, 30) : [],
       summary: profile.summary || profile.description,
       lastScrapedAt: new Date(),
     },

@@ -50,7 +50,7 @@ body {
   margin: 0;
   text-wrap: balance;
 }
-.lp h1 { font-size: clamp(54px, 7vw, 104px); font-weight: 800 }
+.lp h1 { font-size: clamp(38px, 4.8vw, 64px); font-weight: 800 }
 .lp h2 { font-size: clamp(38px, 4.6vw, 62px); font-weight: 800 }
 .lp h3 { font-size: 31px; font-weight: 700 }
 .lp h4 { font-size: 24px; font-weight: 700 }
@@ -148,8 +148,68 @@ body {
 @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1) } 50% { opacity: .5; transform: scale(.8) } }
 
 /* HERO */
-.hero { padding: 120px 0 80px; position: relative }
+.hero { padding: 150px 0 100px; position: relative; min-height: 100svh; display: flex; flex-direction: column; justify-content: flex-start }
 .hero-grid { display: grid; grid-template-columns: 1.15fr .85fr; gap: 64px; align-items: end }
+
+/* Hero orb */
+.hero-orb-wrap {
+  position: absolute; right: -80px; top: -20px; width: 580px; height: 580px;
+  pointer-events: none; z-index: 0; overflow: visible;
+}
+.orb-core {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%,-50%);
+  width: 220px; height: 220px; border-radius: 50%;
+  background: radial-gradient(circle at 38% 32%, rgba(229,75,27,.28), rgba(229,75,27,.09) 50%, transparent 70%);
+  animation: orbBreath 5s ease-in-out infinite;
+  filter: blur(6px);
+}
+.orb-ring {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%,-50%);
+  border-radius: 50%;
+  border: 1px dashed rgba(229,75,27,.2);
+}
+.orb-ring-1 { width: 300px; height: 300px; animation: orbSpin 12s linear infinite; }
+.orb-ring-2 { width: 420px; height: 420px; animation: orbSpin 18s linear infinite reverse; opacity: .6; border-style: solid; border-color: rgba(229,75,27,.1); }
+.orb-ring-3 { width: 540px; height: 540px; animation: orbSpin 26s linear infinite; opacity: .25; }
+.orb-dot {
+  position: absolute; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--orange); left: 50%; top: 0; margin-left: -4.5px;
+  box-shadow: 0 0 10px rgba(229,75,27,.7);
+}
+
+/* Floating orb icons */
+.orb-icon {
+  position: absolute;
+  background: var(--paper);
+  border: 1px solid var(--line-2);
+  border-radius: 99px;
+  padding: 6px 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px; font-weight: 600;
+  white-space: nowrap; color: var(--ink-2);
+  box-shadow: 0 4px 16px rgba(60,40,20,.1);
+}
+.orb-icon.orange { background: var(--orange-soft); color: var(--orange); border-color: rgba(229,75,27,.25); }
+.orb-icon.green  { background: var(--green-soft);  color: var(--green);  border-color: rgba(31,107,63,.2); }
+.orb-icon.dark   { background: var(--ink); color: var(--cream); border-color: var(--ink); }
+
+@keyframes float0 { 0%,100% { transform: translateY(0px) rotate(-1deg); } 50% { transform: translateY(-9px) rotate(1deg); } }
+@keyframes float1 { 0%,100% { transform: translateY(0px) rotate(1deg); } 50% { transform: translateY(-7px) rotate(-1deg); } }
+@keyframes float2 { 0%,100% { transform: translateY(0px); } 50% { transform: translateY(-11px); } }
+@keyframes float3 { 0%,100% { transform: translateY(0px) rotate(1deg); } 50% { transform: translateY(-6px) rotate(-2deg); } }
+@keyframes float4 { 0%,100% { transform: translateY(0px) rotate(-1deg); } 50% { transform: translateY(-8px) rotate(1deg); } }
+@keyframes float5 { 0%,100% { transform: translateY(0px); } 50% { transform: translateY(-10px); } }
+
+@keyframes orbBreath {
+  0%,100% { transform: translate(-50%,-50%) scale(1); opacity: .75; }
+  50% { transform: translate(-50%,-50%) scale(1.12); opacity: 1; }
+}
+@keyframes orbSpin {
+  from { transform: translate(-50%,-50%) rotate(0deg); }
+  to { transform: translate(-50%,-50%) rotate(360deg); }
+}
 .hero-side-label {
   position: absolute; left: 32px; top: 96px;
   font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
@@ -568,6 +628,7 @@ footer.lp-footer { background: var(--cream); padding: 72px 0 32px; border-top: 1
 /* MOBILE */
 @media (max-width: 980px) {
   .hero-grid { grid-template-columns: 1fr; gap: 48px }
+  .hero-orb-wrap { display: none }
   .section-head { grid-template-columns: 1fr; gap: 18px }
   .stats-grid { grid-template-columns: repeat(2,1fr) }
   .tl-row { grid-template-columns: 80px 1fr; gap: 24px }

@@ -153,6 +153,7 @@ export default function OnboardingPage() {
           url: normalizeUrl(url),
           profile,
           selectedSubreddits: [...selectedSubs],
+          keywords,
         }),
       })
       if (!r.ok) {

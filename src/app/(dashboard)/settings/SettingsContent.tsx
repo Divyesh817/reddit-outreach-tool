@@ -234,7 +234,7 @@ function AccountPanel({ user, initial }: { user: Props['user']; initial: string 
       </Row>
 
       {/* Email */}
-      <Row label="Email" hint="Set via Google OAuth — contact support to change.">
+      <Row label="Email" hint="Set via Google OAuth — raise a support ticket to change.">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 16, fontWeight: 500, color: S.text }}>{user.email}</span>
           <span style={{

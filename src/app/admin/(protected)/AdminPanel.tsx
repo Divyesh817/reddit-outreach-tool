@@ -94,7 +94,7 @@ const s = {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function AdminPanel() {
-  const [tab, setTab] = useState<'emails' | 'users' | 'payments' | 'prompts'>('emails')
+  const [tab, setTab] = useState<'emails' | 'users' | 'payments' | 'prompts' | 'support'>('emails')
   const [data, setData] = useState<AdminData | null>(null)
   const [dataLoading, setDataLoading] = useState(false)
 
@@ -127,7 +127,7 @@ export default function AdminPanel() {
       </div>
 
       <div style={s.tabs}>
-        {(['emails', 'users', 'payments', 'prompts'] as const).map(t => (
+        {(['emails', 'users', 'payments', 'prompts', 'support'] as const).map(t => (
           <button key={t} style={s.tab(tab === t)} onClick={() => setTab(t)}>
             {t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
@@ -138,6 +138,7 @@ export default function AdminPanel() {
       {tab === 'users' && <UsersTab data={data} loading={dataLoading} />}
       {tab === 'payments' && <PaymentsTab data={data} loading={dataLoading} />}
       {tab === 'prompts' && <PromptsTab />}
+      {tab === 'support' && <SupportTab />}
     </div>
   )
 }
@@ -533,6 +534,190 @@ function PromptsTab() {
               {msg}
             </div>
           )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Support Tab ──────────────────────────────────────────────────────────────
+
+interface AdminTicket {
+  id: string
+  subject: string
+  status: string
+  createdAt: string
+  updatedAt: string
+  user: { email: string; name: string | null; plan: string }
+  messages: { id: string; content: string; isAdmin: boolean; createdAt: string }[]
+}
+
+const TICKET_STATUS_COLORS: Record<string, string> = {
+  open: '#E54B1B', in_progress: '#D69B14', resolved: '#4caf50',
+}
+
+function SupportTab() {
+  const [tickets, setTickets] = useState<AdminTicket[]>([])
+  const [loading, setLoading] = useState(true)
+  const [active, setActive] = useState<AdminTicket | null>(null)
+  const [reply, setReply] = useState('')
+  const [sending, setSending] = useState(false)
+  const [statusUpdating, setStatusUpdating] = useState(false)
+
+  useEffect(() => { loadTickets() }, [])
+
+  async function loadTickets() {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/admin/tickets')
+      if (res.ok) {
+        const data: AdminTicket[] = await res.json()
+        setTickets(data)
+        setActive(prev => {
+          if (!prev) return null
+          return data.find(t => t.id === prev.id) ?? null
+        })
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function sendAdminReply() {
+    if (!reply.trim() || !active) return
+    setSending(true)
+    try {
+      const res = await fetch(`/api/admin/tickets/${active.id}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: reply }),
+      })
+      if (res.ok) { setReply(''); await loadTickets() }
+    } finally { setSending(false) }
+  }
+
+  async function updateStatus(status: string) {
+    if (!active) return
+    setStatusUpdating(true)
+    try {
+      await fetch(`/api/admin/tickets/${active.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      })
+      await loadTickets()
+    } finally { setStatusUpdating(false) }
+  }
+
+  const openCount = tickets.filter(t => t.status === 'open').length
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+        <h3 style={{ color: '#f5f5f5', margin: 0, fontWeight: 700, fontSize: 16 }}>Support Tickets</h3>
+        {openCount > 0 && (
+          <span style={{ background: '#3a1510', color: '#E54B1B', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 4 }}>
+            {openCount} open
+          </span>
+        )}
+        <button onClick={loadTickets} style={{ ...s.btn('ghost'), marginLeft: 'auto', fontSize: 12 }}>Refresh</button>
+      </div>
+
+      {loading ? (
+        <p style={{ color: '#666', fontSize: 14 }}>Loading…</p>
+      ) : tickets.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '48px 0', color: '#555' }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>💬</div>
+          <p style={{ margin: 0, fontSize: 14 }}>No tickets yet.</p>
+        </div>
+      ) : (
+        <div style={s.splitPane}>
+          <div>
+            {tickets.map(t => (
+              <div key={t.id} onClick={() => setActive(t)} style={s.listItem(active?.id === t.id)}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 3 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#f5f5f5', lineHeight: 1.3, flex: 1 }}>{t.subject}</span>
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 3,
+                    background: `${TICKET_STATUS_COLORS[t.status]}22`,
+                    color: TICKET_STATUS_COLORS[t.status],
+                    whiteSpace: 'nowrap', flexShrink: 0,
+                  }}>{t.status.replace('_', ' ')}</span>
+                </div>
+                <p style={{ margin: 0, fontSize: 11, color: '#666', fontFamily: 'monospace' }}>{t.user.email}</p>
+                <p style={{ margin: '4px 0 0', fontSize: 11, color: '#555' }}>
+                  {t.messages.length} msg{t.messages.length !== 1 ? 's' : ''} · {new Date(t.updatedAt).toLocaleDateString()}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div>
+            {active ? (
+              <div style={{ background: '#111', border: '1px solid #2a2a2a', borderRadius: 12, overflow: 'hidden' }}>
+                <div style={{ padding: '14px 18px', borderBottom: '1px solid #2a2a2a', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: '0 0 3px', fontSize: 14, fontWeight: 700, color: '#f5f5f5' }}>{active.subject}</p>
+                    <p style={{ margin: 0, fontSize: 12, color: '#666' }}>{active.user.email} · {active.user.plan}</p>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {(['open', 'in_progress', 'resolved'] as const).map(st => (
+                      <button key={st} onClick={() => updateStatus(st)} disabled={statusUpdating || active.status === st}
+                        style={{
+                          padding: '5px 10px', fontSize: 11, borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600,
+                          background: active.status === st ? TICKET_STATUS_COLORS[st] : '#222',
+                          color: active.status === st ? '#fff' : '#888',
+                          opacity: statusUpdating ? 0.5 : 1,
+                        }}>
+                        {st.replace('_', ' ')}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 360, overflowY: 'auto' }}>
+                  {active.messages.map(msg => (
+                    <div key={msg.id} style={{ display: 'flex', justifyContent: msg.isAdmin ? 'flex-end' : 'flex-start' }}>
+                      <div style={{
+                        maxWidth: '80%', padding: '10px 14px', borderRadius: 10,
+                        background: msg.isAdmin ? '#E54B1B' : '#1a1a1a',
+                        border: msg.isAdmin ? 'none' : '1px solid #2a2a2a',
+                      }}>
+                        <p style={{ margin: 0, fontSize: 13, color: msg.isAdmin ? '#fff' : '#d0d0d0', lineHeight: 1.5 }}>{msg.content}</p>
+                        <p style={{ margin: '4px 0 0', fontSize: 10, color: msg.isAdmin ? 'rgba(255,255,255,.6)' : '#555', textAlign: 'right' }}>
+                          {msg.isAdmin ? 'You · ' : `${active.user.email.split('@')[0]} · `}
+                          {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {active.status !== 'resolved' && (
+                  <div style={{ padding: '12px 16px', borderTop: '1px solid #2a2a2a' }}>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <textarea
+                        value={reply}
+                        onChange={e => setReply(e.target.value)}
+                        placeholder="Type your reply… (⌘+Enter to send)"
+                        rows={2}
+                        style={{ ...s.textarea, flex: 1, resize: 'none' }}
+                        onKeyDown={e => { if (e.key === 'Enter' && e.metaKey) sendAdminReply() }}
+                      />
+                      <button onClick={sendAdminReply} disabled={sending || !reply.trim()}
+                        style={{ ...s.btn('primary'), opacity: sending || !reply.trim() ? 0.5 : 1, alignSelf: 'flex-end' }}>
+                        {sending ? '…' : 'Reply'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '48px 0', color: '#555', fontSize: 14 }}>
+                Select a ticket to view the thread
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

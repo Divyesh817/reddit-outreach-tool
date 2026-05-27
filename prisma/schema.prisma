@@ -42,9 +42,10 @@ model User {
   redditBackupTokenExpiry  DateTime?
 
   // Relations
-  products      Product[]
-  warmupSession WarmupSession?
-  accountHealth AccountHealth?
+  products        Product[]
+  warmupSession   WarmupSession?
+  accountHealth   AccountHealth?
+  supportTickets  SupportTicket[]
 
   @@map("users")
 }
@@ -64,6 +65,7 @@ model Product {
   targetAudience String @db.Text
   keyBenefits String[] // array of benefit strings
   competitors String[] // competitor names extracted from page
+  keywords    String[] // intent-matching keywords chosen during onboarding
   summary     String   @db.Text // AI-generated summary used for all prompts
 
   // Status
@@ -318,4 +320,32 @@ model GeoReport {
   product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@map("geo_reports")
+}
+
+// ─── Support Tickets ──────────────────────────────────────────────────────────
+
+model SupportTicket {
+  id        String          @id @default(cuid())
+  userId    String
+  subject   String
+  status    String          @default("open") // open | in_progress | resolved
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  user      User            @relation(fields: [userId], references: [id])
+  messages  TicketMessage[]
+
+  @@map("support_tickets")
+}
+
+model TicketMessage {
+  id        String        @id @default(cuid())
+  ticketId  String
+  content   String        @db.Text
+  isAdmin   Boolean       @default(false)
+  createdAt DateTime      @default(now())
+
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@map("ticket_messages")
 }
