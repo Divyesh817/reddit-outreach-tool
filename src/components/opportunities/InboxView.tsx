@@ -318,30 +318,77 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
   async function handleScan() {
     setScanning(true); setScanMsg('')
     try {
-      const r = await fetch('/api/scan', { method: 'POST' })
-      const data = await r.json().catch(() => ({}))
-      if (data.error) {
-        setScanMsg(`Error: ${data.error}`)
+      // Step 1: get subreddits to scan from server
+      const prepRes = await fetch('/api/scan', { method: 'POST' })
+      const prep = await prepRes.json().catch(() => ({}))
+
+      if (prep.error && !prep.subreddits) {
+        setScanMsg(prep.limitReached ? `Limit reached: ${prep.error}` : `Error: ${prep.error}`)
+        setTimeout(() => setScanMsg(''), 7000)
+        setScanning(false)
+        return
+      }
+
+      const subreddits: { subredditId: string; subredditName: string; productId: string }[] = prep.subreddits ?? []
+      if (!subreddits.length) {
+        setScanMsg('No subreddits configured — add some in Products')
+        setTimeout(() => setScanMsg(''), 6000)
+        setScanning(false)
+        return
+      }
+
+      setScanMsg(`Fetching ${subreddits.length} subreddit${subreddits.length !== 1 ? 's' : ''}…`)
+
+      // Step 2: fetch Reddit threads from browser (bypasses Vercel IP blocks)
+      const limit = prep.fetchLimit ?? 15
+      const subredditsData = await Promise.all(
+        subreddits.map(async ({ subredditId, subredditName, productId }) => {
+          const ua = 'Redgrow/1.0 (by /u/PastReaction341)'
+          const [nr, hr, tr] = await Promise.allSettled([
+            fetch(`https://www.reddit.com/r/${subredditName}/new.json?limit=${limit}`, { headers: { 'User-Agent': ua } }).then(r => r.json()),
+            fetch(`https://www.reddit.com/r/${subredditName}/hot.json?limit=${limit}`, { headers: { 'User-Agent': ua } }).then(r => r.json()),
+            fetch(`https://www.reddit.com/r/${subredditName}/top.json?limit=${limit}&t=day`, { headers: { 'User-Agent': ua } }).then(r => r.json()),
+          ])
+          const threads = [
+            ...(nr.status === 'fulfilled' ? (nr.value?.data?.children ?? []).map((c: any) => c.data) : []),
+            ...(hr.status === 'fulfilled' ? (hr.value?.data?.children ?? []).map((c: any) => c.data) : []),
+            ...(tr.status === 'fulfilled' ? (tr.value?.data?.children ?? []).map((c: any) => c.data) : []),
+          ]
+          return { subredditId, productId, threads }
+        })
+      )
+
+      const totalFetched = subredditsData.reduce((s, d) => s + d.threads.length, 0)
+      if (!totalFetched) {
+        setScanMsg('Could not reach Reddit — check your connection')
+        setTimeout(() => setScanMsg(''), 6000)
+        setScanning(false)
+        return
+      }
+
+      setScanMsg('Scoring threads…')
+
+      // Step 3: send threads to server for AI scoring + saving
+      const processRes = await fetch('/api/scan/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subredditsData }),
+      })
+      const result = await processRes.json().catch(() => ({}))
+
+      if (result.error) {
+        setScanMsg(`Error: ${result.error}`)
         setTimeout(() => setScanMsg(''), 8000)
       } else {
-        const n = data.totalCreated ?? 0
-        if (n > 0) {
-          setScanMsg(`${n} new lead${n !== 1 ? 's' : ''} found`)
-        } else if (!data.subredditsChecked) {
-          setScanMsg('No subreddits configured — add some in Settings')
-        } else if (!data.totalFetched) {
-          setScanMsg('Reddit unreachable — try again shortly')
-        } else if (data.totalAlreadyInDb >= data.totalScanned && data.totalScanned > 0) {
-          setScanMsg('All recent leads already in inbox')
-        } else {
-          setScanMsg(`Scanned ${data.subredditsChecked} subreddits — no high-intent threads yet`)
-        }
+        const n = result.totalCreated ?? 0
+        setScanMsg(n > 0 ? `${n} new lead${n !== 1 ? 's' : ''} found!` : `Scanned ${subreddits.length} subreddits — no new high-intent threads`)
         setTimeout(() => setScanMsg(''), 7000)
       }
-      // Always refresh so inbox reflects current DB state
+
       router.refresh()
-    } catch {
-      setScanMsg('Scan failed — check console'); setTimeout(() => setScanMsg(''), 5000)
+    } catch (e) {
+      setScanMsg('Scan failed — try again')
+      setTimeout(() => setScanMsg(''), 5000)
     }
     setScanning(false)
   }
