@@ -152,6 +152,7 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
       })
       const data = await res.json()
       setCommentReplies(prev => ({ ...prev, [commentIndex]: { text: data.text ?? '', whyThisWorks: data.whyThisWorks ?? '', loading: false, copied: false } }))
+      if (data.text) router.refresh()
     } catch {
       setCommentReplies(prev => ({ ...prev, [commentIndex]: { text: '', whyThisWorks: '', loading: false, copied: false } }))
     }
@@ -327,6 +328,7 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
       setReplyText(data.text); setCopied(false); setEditMode(false)
       setSelected(s => s ? { ...s, replies: [nr] } : s)
       setAllOpps(os => os.map(o => o.id === selected.id ? { ...o, replies: [nr] } : o))
+      router.refresh()
     }
     setLoading(null)
   }
