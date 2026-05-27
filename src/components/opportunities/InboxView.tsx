@@ -320,13 +320,28 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
     try {
       const r = await fetch('/api/scan', { method: 'POST' })
       const data = await r.json().catch(() => ({}))
-      const n = data.totalCreated ?? 0
-      setScanMsg(n > 0 ? `${n} new lead${n !== 1 ? 's' : ''} found` : 'All caught up')
-      setTimeout(() => setScanMsg(''), 5000)
+      if (data.error) {
+        setScanMsg(`Error: ${data.error}`)
+        setTimeout(() => setScanMsg(''), 8000)
+      } else {
+        const n = data.totalCreated ?? 0
+        if (n > 0) {
+          setScanMsg(`${n} new lead${n !== 1 ? 's' : ''} found`)
+        } else if (!data.subredditsChecked) {
+          setScanMsg('No subreddits configured — add some in Settings')
+        } else if (!data.totalFetched) {
+          setScanMsg('Reddit unreachable — try again shortly')
+        } else if (data.totalAlreadyInDb >= data.totalScanned && data.totalScanned > 0) {
+          setScanMsg('All recent leads already in inbox')
+        } else {
+          setScanMsg(`Scanned ${data.subredditsChecked} subreddits — no high-intent threads yet`)
+        }
+        setTimeout(() => setScanMsg(''), 7000)
+      }
       // Always refresh so inbox reflects current DB state
       router.refresh()
     } catch {
-      setScanMsg('Scan failed'); setTimeout(() => setScanMsg(''), 4000)
+      setScanMsg('Scan failed — check console'); setTimeout(() => setScanMsg(''), 5000)
     }
     setScanning(false)
   }

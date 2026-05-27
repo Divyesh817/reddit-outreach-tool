@@ -99,6 +99,9 @@ export async function POST() {
 
   let totalCreated = 0
   let totalScanned = 0
+  let totalFetched = 0
+  let totalAlreadyInDb = 0
+  let subredditsChecked = 0
 
   // Per-scan cap: don't exceed remaining monthly budget in one go
   const perScanCap = Math.min(remainingOpps, limits.threadsPerSubreddit)
@@ -128,6 +131,7 @@ export async function POST() {
       }
 
       for (const subreddit of product.subreddits) {
+        subredditsChecked++
         const fetchLimit = Math.min(15, Math.ceil(limits.threadsPerSubreddit / 2))
         const [newRes, hotRes, topRes] = await Promise.allSettled([
           fetchNewThreads(subreddit.name, fetchLimit, true),
@@ -139,6 +143,7 @@ export async function POST() {
         if (newRes.status === 'fulfilled') threads.push(...newRes.value)
         if (hotRes.status === 'fulfilled') threads.push(...hotRes.value)
         if (topRes.status === 'fulfilled') threads.push(...topRes.value)
+        totalFetched += threads.length
 
         // De-duplicate by post id
         const seen = new Set<string>()
@@ -174,6 +179,8 @@ export async function POST() {
           })).map(o => o.redditPostId)
         )
 
+        totalAlreadyInDb += existingIds.size
+
         // Hard cap at 8 new threads per scan to keep latency bounded
         const toScore = candidates
           .filter(t => !existingIds.has(t.id))
@@ -191,6 +198,16 @@ export async function POST() {
           },
           5
         )
+
+        // Check if all scoring calls failed (likely API key / credits issue)
+        const allFailed = scoringResults.length > 0 && scoringResults.every(r => r.status === 'rejected')
+        if (allFailed) {
+          const firstError = (scoringResults[0] as PromiseRejectedResult).reason
+          return NextResponse.json({
+            error: `AI scoring failed: ${firstError?.message ?? firstError ?? 'unknown error'}`,
+            totalCreated: 0,
+          }, { status: 500 })
+        }
 
         // Persist passing opportunities
         const passingOpps: { thread: RedditThread; scoring: any; opportunityId: string }[] = []
@@ -266,10 +283,15 @@ export async function POST() {
     if (totalCreated > 0) break
   }
 
+  console.log('[scan]', { subredditsChecked, totalFetched, totalScanned, totalAlreadyInDb, totalCreated })
+
   return NextResponse.json({
     message: 'Scan complete',
     totalCreated,
     totalScanned,
+    totalFetched,
+    totalAlreadyInDb,
+    subredditsChecked,
     plan,
     limits: {
       opportunitiesPerMonth: limits.opportunitiesPerMonth,
