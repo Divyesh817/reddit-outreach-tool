@@ -103,13 +103,10 @@ export async function POST() {
   // Per-scan cap: don't exceed remaining monthly budget in one go
   const perScanCap = Math.min(remainingOpps, limits.threadsPerSubreddit)
 
-  // Fallback windows: try plan's lookback first, then expand to 48h → 72h if nothing found.
-  // This ensures we always surface leads even in slow periods.
-  const lookbackWindows = Array.from(new Set([
-    Math.max(limits.lookbackHours, 24),
-    48,
-    72,
-  ]))
+  // Fallback windows: try plan's lookback first, then expand up to 2× if nothing found.
+  // Use distinct values — plans with wide lookbacks get extended even further.
+  const base = Math.max(limits.lookbackHours, 24)
+  const lookbackWindows = Array.from(new Set([base, Math.max(base, 72), Math.max(base * 2, 96)]))
   // Intent score thresholds — lower on each retry so we always surface something
   const intentThresholds = [25, 15, 10]
 
@@ -161,14 +158,18 @@ export async function POST() {
           return true
         })
 
-        // Pre-filter with keyword signals
-        const candidates = fresh.filter(t => passesIntentPreFilter(t, profile))
+        // Pre-filter with keyword signals; skip on last attempt so something always gets scored
+        const isLastAttempt = attempt === lookbackWindows.length - 1
+        const candidates = isLastAttempt ? fresh : fresh.filter(t => passesIntentPreFilter(t, profile))
         totalScanned += candidates.length
 
-        // Skip threads already in DB
+        // Skip threads this user already has in DB (scoped to user to avoid cross-user collisions)
         const existingIds = new Set(
           (await prisma.opportunity.findMany({
-            where: { redditPostId: { in: candidates.map(t => t.id) } },
+            where: {
+              redditPostId: { in: candidates.map(t => t.id) },
+              product: { userId: user.id },
+            },
             select: { redditPostId: true },
           })).map(o => o.redditPostId)
         )

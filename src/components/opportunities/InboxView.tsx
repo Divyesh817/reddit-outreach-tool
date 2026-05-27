@@ -321,10 +321,10 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
       const r = await fetch('/api/scan', { method: 'POST' })
       const data = await r.json().catch(() => ({}))
       const n = data.totalCreated ?? 0
-      setScanMsg(n > 0 ? `${n} new lead${n !== 1 ? 's' : ''} found` : 'No new leads')
+      setScanMsg(n > 0 ? `${n} new lead${n !== 1 ? 's' : ''} found` : 'All caught up')
       setTimeout(() => setScanMsg(''), 5000)
-      // Refresh server data to pick up new leads — only after scan completes
-      if (n > 0) router.refresh()
+      // Always refresh so inbox reflects current DB state
+      router.refresh()
     } catch {
       setScanMsg('Scan failed'); setTimeout(() => setScanMsg(''), 4000)
     }
