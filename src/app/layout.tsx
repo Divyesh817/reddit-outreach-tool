@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Plus_Jakarta_Sans } from 'next/font/google'
+import Script from 'next/script'
 import { Providers } from '@/components/providers'
 import './globals.css'
 
@@ -102,6 +103,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className={jakarta.className}>
         <Providers>{children}</Providers>
+        <Script
+          src="https://datafa.st/js/script.js"
+          data-website-id="dfid_rbYADUGJF4GbJtitXoLrs"
+          data-domain="redgrow.app"
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   )
