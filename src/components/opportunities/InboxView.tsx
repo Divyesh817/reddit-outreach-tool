@@ -245,14 +245,28 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
     setCommentsLoading(true)
     setCommentsError('')
     try {
-      const res = await fetch(`/api/reddit/comments?url=${encodeURIComponent(url)}`)
+      const clean = url.split('?')[0].replace(/\/$/, '')
+      const jsonUrl = `${clean}.json?limit=25&depth=1&raw_json=1`
+      const res = await fetch(jsonUrl)
+      if (!res.ok) throw new Error(`Reddit returned ${res.status}`)
       const data = await res.json()
-      if (data.error && !data.comments?.length) {
-        setCommentsError(data.error)
-        setComments([])
-      } else {
-        setComments(data.comments ?? [])
-      }
+      const children = data?.[1]?.data?.children ?? []
+      const fetched = children
+        .filter((c: any) =>
+          c.kind === 't1' &&
+          c.data?.body &&
+          c.data.body !== '[deleted]' &&
+          c.data.body !== '[removed]' &&
+          c.data.author !== 'AutoModerator' &&
+          c.data.author !== '[deleted]'
+        )
+        .slice(0, 10)
+        .map((c: any) => ({
+          author: c.data.author as string,
+          body: c.data.body as string,
+          score: c.data.score as number,
+        }))
+      setComments(fetched)
     } catch (e: any) {
       setCommentsError(e.message ?? 'Failed to load comments')
       setComments([])
