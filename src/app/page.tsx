@@ -630,7 +630,7 @@ export default function LandingPage() {
                 <p style={{ margin: '8px 0 0', fontSize: 14, color: 'var(--text3)', lineHeight: 1.55 }}>Get a feel for what Redgrow finds before you commit.</p>
               </div>
               <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 9, flex: 1 }}>
-                {['1 product', '100 opps / month', '20 reply drafts', '2 scans / day', '5 subreddits'].map(f => (
+                {['1 product', '100 opps / month', '10 reply drafts', '2 scans / day', '5 subreddits'].map(f => (
                   <li key={f} style={{ fontSize: 14.5, color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 9 }}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--green)" strokeWidth="2.8"><polyline points="20 6 9 17 4 12"/></svg>
                     {f}

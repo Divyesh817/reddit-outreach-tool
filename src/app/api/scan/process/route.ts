@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { prisma } from '@/lib/prisma'
-import { scoreOpportunity, generateReply } from '@/lib/anthropic'
+import { scoreOpportunity } from '@/lib/anthropic'
 import { PLAN_LIMITS } from '@/types'
 import type { ProductProfile, Plan } from '@/types'
 
@@ -155,7 +155,6 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: `AI scoring failed: ${err?.message ?? err}`, totalCreated: 0 }, { status: 500 })
       }
 
-      const passingOpps: { thread: RawThread; scoring: any; opportunityId: string }[] = []
       for (const result of scoringResults) {
         if (result.status !== 'fulfilled') continue
         const { thread, scoring } = result.value
@@ -181,36 +180,10 @@ export async function POST(req: Request) {
               status: 'QUEUED',
             }
           })
-          if (scoring.intentScore >= 45) {
-            passingOpps.push({ thread, scoring, opportunityId: opp.id })
-          }
           totalCreated++
         } catch { continue }
         if (totalCreated >= perScanCap) break
       }
-
-      await concurrent(
-        passingOpps,
-        async ({ thread, scoring, opportunityId }) => {
-          const replyResult = await generateReply(
-            { title: thread.title, body: thread.selftext, subreddit: subreddit.name },
-            profile,
-            scoring.painType,
-            scoring.shouldPitch
-          )
-          await prisma.reply.create({
-            data: {
-              opportunityId,
-              text: replyResult.text,
-              toneUsed: replyResult.toneUsed,
-              whyThisWorks: replyResult.whyThisWorks,
-              version: 1,
-              isActive: true,
-            }
-          })
-        },
-        3
-      )
 
       await prisma.subreddit.update({ where: { id: subredditId }, data: { lastScannedAt: new Date() } })
       if (totalCreated >= perScanCap) break
