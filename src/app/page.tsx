@@ -78,7 +78,7 @@ export default function LandingPage() {
           </div>
           <div className="nav-cta">
             <Link href="/login" className="login">Login</Link>
-            <Link href="/login" className="btn btn-primary btn-sm">Get started <span className="arr">→</span></Link>
+            <Link href="/login?mode=signup" className="btn btn-primary btn-sm">Get started <span className="arr">→</span></Link>
             <button className="hamburger" id="ham" aria-label="Menu"><span></span></button>
           </div>
         </div>
@@ -92,7 +92,7 @@ export default function LandingPage() {
           <Link href="#how">How it works</Link>
           <Link href="#pricing">Pricing</Link>
           <Link href="/login">Login</Link>
-          <Link href="/login" className="btn btn-primary">Get started →</Link>
+          <Link href="/login?mode=signup" className="btn btn-primary">Get started →</Link>
         </div>
       </div>
 
@@ -152,7 +152,7 @@ export default function LandingPage() {
                 Redgrow monitors Reddit 24/7, scores every thread 0–100 for buying intent, and drafts a contextual reply. You copy it, paste it on Reddit yourself — your account, your words, zero ban risk.
               </p>
               <div className="hero-ctas reveal">
-                <Link href="/login" className="btn btn-orange btn-lg">Start free trial <span className="arr">→</span></Link>
+                <Link href="/login?mode=signup" className="btn btn-orange btn-lg">Start free trial <span className="arr">→</span></Link>
                 <Link href="#how" className="btn btn-ghost btn-lg">See how it works</Link>
               </div>
               <div className="meta-row reveal">
@@ -637,7 +637,7 @@ export default function LandingPage() {
                   </li>
                 ))}
               </ul>
-              <Link href="/login" style={{ display: 'block', textAlign: 'center', padding: '11px 0', borderRadius: 10, fontSize: 15, fontWeight: 700, background: 'var(--panel2)', border: '1px solid var(--line2)', color: 'var(--text)', textDecoration: 'none' }}>
+              <Link href="/login?mode=signup" style={{ display: 'block', textAlign: 'center', padding: '11px 0', borderRadius: 10, fontSize: 15, fontWeight: 700, background: 'var(--panel2)', border: '1px solid var(--line2)', color: 'var(--text)', textDecoration: 'none' }}>
                 Start free
               </Link>
             </div>
@@ -663,7 +663,7 @@ export default function LandingPage() {
                   </li>
                 ))}
               </ul>
-              <Link href="/login" style={{ display: 'block', textAlign: 'center', padding: '11px 0', borderRadius: 10, fontSize: 15, fontWeight: 700, background: 'var(--orange)', color: '#fff', textDecoration: 'none' }}>
+              <Link href="/login?mode=signup" style={{ display: 'block', textAlign: 'center', padding: '11px 0', borderRadius: 10, fontSize: 15, fontWeight: 700, background: 'var(--orange)', color: '#fff', textDecoration: 'none' }}>
                 Get started →
               </Link>
             </div>
@@ -686,7 +686,7 @@ export default function LandingPage() {
                   </li>
                 ))}
               </ul>
-              <Link href="/login" style={{ display: 'block', textAlign: 'center', padding: '11px 0', borderRadius: 10, fontSize: 15, fontWeight: 700, background: 'var(--panel2)', border: '1px solid var(--line2)', color: 'var(--text)', textDecoration: 'none' }}>
+              <Link href="/login?mode=signup" style={{ display: 'block', textAlign: 'center', padding: '11px 0', borderRadius: 10, fontSize: 15, fontWeight: 700, background: 'var(--panel2)', border: '1px solid var(--line2)', color: 'var(--text)', textDecoration: 'none' }}>
                 Get started →
               </Link>
             </div>
@@ -721,7 +721,7 @@ export default function LandingPage() {
           <div className="reddit-mark-big" />
           <h2>Stop scrolling. <em>Start showing up.</em></h2>
           <p>Reddit has 500M active users — and AI search is citing their conversations daily. Thousands of warm leads are asking for your product right now. Redgrow finds them, drafts the reply, you paste it. That&apos;s it.</p>
-          <Link href="/login" className="btn btn-orange btn-lg" style={{ marginTop: '10px' }}>Start your free trial <span className="arr">→</span></Link>
+          <Link href="/login?mode=signup" className="btn btn-orange btn-lg" style={{ marginTop: '10px' }}>Start your free trial <span className="arr">→</span></Link>
           <div className="trust-row">
             <span>Starts at $9/mo</span><span className="dot"></span>
             <span>14-day money-back</span><span className="dot"></span>

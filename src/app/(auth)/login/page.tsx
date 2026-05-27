@@ -2,9 +2,12 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
+  const searchParams = useSearchParams()
+  const isSignup = searchParams.get('mode') === 'signup'
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -51,8 +54,8 @@ export default function LoginPage() {
       <div style={s.card}>
         <div style={s.cardTop}>
           <span style={s.dotLg}><span style={s.dotLgInner} /></span>
-          <h1 style={s.h1}>Welcome to Redgrow</h1>
-          <p style={s.sub}>Sign in to find high-intent Reddit buyers.</p>
+          <h1 style={s.h1}>{isSignup ? 'Create your free account' : 'Welcome back'}</h1>
+          <p style={s.sub}>{isSignup ? 'Start finding high-intent Reddit leads today.' : 'Sign in to your Redgrow account.'}</p>
         </div>
 
         {sent ? (
