@@ -800,11 +800,36 @@ export default function LandingPage() {
               </ul>
             </div>
             <div>
+              <h5>Guides</h5>
+              <ul>
+                <li><Link href="/how-to/find-customers-on-reddit-without-getting-banned">Find customers on Reddit</Link></li>
+                <li><Link href="/how-to/promote-saas-on-reddit-organically">Promote SaaS organically</Link></li>
+                <li><Link href="/how-to/reply-to-reddit-threads-to-get-signups">Get signups from Reddit</Link></li>
+                <li><Link href="/how-to/find-buying-intent-threads-on-reddit">Find buying intent threads</Link></li>
+                <li><Link href="/reddit-marketing/why-you-keep-getting-banned-on-reddit">Why you keep getting banned</Link></li>
+                <li><Link href="/reddit-marketing/reddit-marketing-without-shadowban">Avoid shadowbans</Link></li>
+              </ul>
+            </div>
+            <div>
+              <h5>Use Cases</h5>
+              <ul>
+                <li><Link href="/for/saas-founders">For SaaS founders</Link></li>
+                <li><Link href="/for/reddit-lead-generation-for-agencies">For agencies</Link></li>
+                <li><Link href="/for/how-to-find-first-100-customers-on-reddit">First 100 customers</Link></li>
+                <li><Link href="/for/reddit-comments-into-paying-customers">Turn comments to customers</Link></li>
+                <li><Link href="/for/reddit-marketing-strategy-early-stage-startups">Early stage strategy</Link></li>
+                <li><Link href="/for/reddit-keyword-monitoring">Keyword monitoring</Link></li>
+                <li><Link href="/for/reddit-marketing-tool">Reddit marketing tool</Link></li>
+              </ul>
+            </div>
+            <div>
               <h5>Resources</h5>
               <ul>
                 <li><Link href="/blog">Blog</Link></li>
-                <li><Link href="/docs">Help Center</Link></li>
-                <li><Link href="/docs/tutorials">Tutorials</Link></li>
+                <li><Link href="/best/reddit-marketing-tools-for-saas-founders">Best Reddit tools</Link></li>
+                <li><Link href="/best/tools-to-find-leads-on-reddit">Lead gen tools</Link></li>
+                <li><Link href="/generative-engine/how-to-get-saas-recommended-by-chatgpt">Get recommended by ChatGPT</Link></li>
+                <li><Link href="/generative-engine/what-is-geo-and-why-saas-founders-need-it">What is GEO?</Link></li>
               </ul>
             </div>
             <div>
