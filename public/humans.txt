@@ -1,0 +1,14 @@
+/* TEAM */
+Name: Div Patel
+Role: Founder & Developer
+Contact: div [at] redgrow [dot] app
+Location: India
+
+/* SITE */
+Last update: 2026-05-28
+Language: English
+Doctype: HTML5
+IDE: VS Code
+
+/* THANKS */
+Next.js, Supabase, Anthropic Claude, Tailwind CSS
