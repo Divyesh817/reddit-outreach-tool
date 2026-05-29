@@ -134,6 +134,9 @@ model Opportunity {
   redditCommentCount Int   @default(0)
   redditPostedAt  DateTime
 
+  // Top comments stored at scan time so the UI reads from DB — no live Reddit fetch needed
+  topComments     String[] @default([])
+
   // AI scoring
   intentScore     Int      // 0–100
   painType        PainType

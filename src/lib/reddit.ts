@@ -1,5 +1,6 @@
 // src/lib/reddit.ts
 import Snoowrap from 'snoowrap'
+import { ApifyClient } from 'apify-client'
 import { SAFETY } from '@/types'
 import { prisma } from '@/lib/prisma'
 
@@ -218,6 +219,64 @@ export async function fetchRecentCommentThreads(
   )
 
   return [...threadMap.values()]
+}
+
+// ─── Apify thread fetching (used by background jobs — bypasses Vercel IP block) ─
+
+export async function fetchThreadsViaApify(
+  subredditName: string,
+  limit = 25
+): Promise<RedditThread[]> {
+  const token = process.env.APIFY_API_TOKEN
+  if (!token) throw new Error('APIFY_API_TOKEN not set')
+
+  const client = new ApifyClient({ token })
+
+  const run = await client.actor('trudax/reddit-scraper').call({
+    searches: [{
+      keywords: '',
+      subreddit: subredditName,
+      type: 'link',
+      sort: 'new',
+      time: 'week',
+    }],
+    maxItems: limit,
+    commentsPerPost: 5,
+    proxy: { useApifyProxy: true },
+  }, { timeoutSecs: 120 })
+
+  const { items } = await client.dataset(run.defaultDatasetId).listItems()
+
+  // Group comments by their parent post id
+  const commentsByPost: Record<string, string[]> = {}
+  for (const item of items as any[]) {
+    if (item.dataType === 'comment' && item.parentId) {
+      const postId = String(item.parentId).replace(/^t3_/, '')
+      if (!commentsByPost[postId]) commentsByPost[postId] = []
+      if (item.text && commentsByPost[postId].length < 5) {
+        commentsByPost[postId].push(String(item.text).slice(0, 300))
+      }
+    }
+  }
+
+  return (items as any[])
+    .filter(item => (item.dataType === 'post' || !item.dataType) && item.title && item.id)
+    .map((item): RedditThread => {
+      const id = String(item.id)
+      return {
+        id,
+        url: item.url ?? `https://reddit.com/r/${subredditName}`,
+        title: item.title,
+        selftext: item.text ?? item.selftext ?? item.body ?? '',
+        author: item.author ?? '[deleted]',
+        score: item.score ?? 1,
+        num_comments: item.numberOfComments ?? item.numComments ?? 0,
+        created_utc: item.createdAt
+          ? Math.floor(new Date(item.createdAt).getTime() / 1000)
+          : Math.floor(Date.now() / 1000),
+        comments: commentsByPost[id] ?? [],
+      }
+    })
 }
 
 // ─── Client Factory (for posting — requires user OAuth) ───────────────────────

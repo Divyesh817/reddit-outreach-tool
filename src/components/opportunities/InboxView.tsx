@@ -57,6 +57,7 @@ interface Opportunity {
   shouldPitch: boolean
   scoringReasoning: string | null
   status: string
+  topComments: string[]
   subreddit: { name: string; allowsPromotion: boolean; rulesScannedAt: string | null }
   replies: Reply[]
   product: { id: string; name: string }
@@ -207,9 +208,9 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
   const h = useRef({ handleMarkDone, handleCopy, handleSkip, navigateRelative })
   useEffect(() => { h.current = { handleMarkDone, handleCopy, handleSkip, navigateRelative } })
 
-  // Fetch comments for the initially selected thread on mount
+  // Load stored comments for the initially selected thread on mount
   useEffect(() => {
-    if (selected?.redditPostUrl) fetchComments(selected.redditPostUrl)
+    if (selected) loadStoredComments(selected)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -235,26 +236,21 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
     setPostExpanded(false)
     setCopied(false)
     setIncludePitch(null)
-    setComments(null)
     setCommentsError('')
     setCommentReplies({})
     detailRef.current?.scrollTo(0, 0)
-    fetchComments(opp.redditPostUrl)
+    loadStoredComments(opp)
   }
 
-  async function fetchComments(url: string) {
-    setCommentsLoading(true)
-    setCommentsError('')
-    try {
-      const res = await fetch(`/api/reddit/comments?url=${encodeURIComponent(url)}`)
-      const data = await res.json()
-      if (data.error) throw new Error(data.error)
-      setComments(data.comments ?? [])
-    } catch (e: any) {
-      setCommentsError(e.message ?? 'Failed to load comments')
+  function loadStoredComments(opp: Opportunity) {
+    const stored = (opp.topComments ?? []).filter(Boolean)
+    if (stored.length > 0) {
+      setComments(stored.map(body => ({ author: '', body, score: 0 })))
+    } else {
       setComments([])
     }
     setCommentsLoading(false)
+    setCommentsError('')
   }
 
   function navigateRelative(delta: number) {
@@ -683,24 +679,9 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
                       </svg>
                       Loading comments from Reddit…
                     </div>
-                  ) : comments === null ? (
-                    <button
-                      onClick={() => selected && fetchComments(selected.redditPostUrl)}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 8, padding: '14px 18px',
-                        background: S.card, border: `1px dashed ${S.line2}`, borderRadius: 12,
-                        fontSize: 14, color: S.text3, cursor: 'pointer', fontFamily: 'inherit', width: '100%',
-                      }}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: S.text4 }}>
-                        <path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5z"/>
-                      </svg>
-                      Load comments
-                    </button>
                   ) : commentsError ? (
-                    <div style={{ padding: '12px 18px', background: S.card, border: `1px solid ${S.line}`, borderRadius: 12, fontSize: 13, color: S.text3 }}>
-                      Could not load comments: {commentsError}
-                      <button onClick={() => selected && fetchComments(selected.redditPostUrl)} style={{ marginLeft: 10, color: S.orange2, background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit' }}>Retry</button>
+                    <div style={{ padding: '14px 18px', background: S.card, border: `1px solid ${S.line}`, borderRadius: 12, fontSize: 13, color: S.text3 }}>
+                      No comments available for this thread.
                     </div>
                   ) : comments.length === 0 ? (
                     <div style={{ padding: '14px 18px', background: S.card, border: `1px solid ${S.line}`, borderRadius: 12, fontSize: 14, color: S.text3 }}>
@@ -714,16 +695,20 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
                             <div key={i} style={{ background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, overflow: 'hidden' }}>
                               {/* Comment header */}
                               <div style={{ padding: '11px 16px', borderBottom: `1px solid ${S.line}`, display: 'flex', alignItems: 'center', gap: 8, background: S.panel2 }}>
-                                <div style={{
-                                  width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-                                  background: 'linear-gradient(135deg,#8B6CFF,#5040C2)',
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  fontSize: 12, fontWeight: 700, color: '#fff',
-                                }}>
-                                  {c.author[0]?.toUpperCase() ?? '?'}
-                                </div>
-                                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 600, color: S.text2 }}>u/{c.author}</span>
-                                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: S.text3 }}>▲ {c.score}</span>
+                                {c.author ? (<>
+                                  <div style={{
+                                    width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                                    background: 'linear-gradient(135deg,#8B6CFF,#5040C2)',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontSize: 12, fontWeight: 700, color: '#fff',
+                                  }}>
+                                    {c.author[0]?.toUpperCase() ?? '?'}
+                                  </div>
+                                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 600, color: S.text2 }}>u/{c.author}</span>
+                                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: S.text3 }}>▲ {c.score}</span>
+                                </>) : (
+                                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: S.text3 }}>Comment {i + 1}</span>
+                                )}
                                 <div style={{ marginLeft: 'auto' }}>
                                   {!cr ? (
                                     <button

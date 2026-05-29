@@ -2,7 +2,7 @@
 import { Inngest } from 'inngest'
 import { Resend } from 'resend'
 import { prisma } from '@/lib/prisma'
-import { fetchNewThreads, checkDailyPostingLimit, checkSubredditCooldown,
+import { fetchThreadsViaApify, fetchNewThreads, checkDailyPostingLimit, checkSubredditCooldown,
          checkShadowban, checkCommentVisible, fetchSubredditRules,
          fetchAccountKarma, postReply } from '@/lib/reddit'
 import { scoreOpportunity, generateReply, generateWarmupComment, runGeoAnalysis } from '@/lib/anthropic'
@@ -24,9 +24,8 @@ async function scanSubredditForProduct(
 ) {
   let threads
   try {
-    threads = await fetchNewThreads(subreddit.name, 25)
+    threads = await fetchThreadsViaApify(subreddit.name, 25)
   } catch (err: any) {
-    // Subreddit might be private or banned — skip silently
     console.error(`Scan skipped r/${subreddit.name}: ${err.message}`)
     return 0
   }
@@ -74,6 +73,7 @@ async function scanSubredditForProduct(
         redditPostUrl: thread.url,
         redditPostTitle: thread.title,
         redditPostBody: thread.selftext || null,
+        topComments: thread.comments ?? [],
         redditAuthor: thread.author,
         redditScore: thread.score,
         redditCommentCount: thread.num_comments,
