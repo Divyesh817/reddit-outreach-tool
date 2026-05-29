@@ -243,7 +243,7 @@ export async function fetchThreadsViaApify(
     maxItems: limit,
     commentsPerPost: 5,
     proxy: { useApifyProxy: true },
-  }, { timeoutSecs: 120 })
+  })
 
   const { items } = await client.dataset(run.defaultDatasetId).listItems()
 

@@ -27,6 +27,7 @@ interface RawThread {
   num_comments: number
   created_utc: number
   permalink: string
+  comments?: string[]
 }
 
 function passesIntentPreFilter(thread: RawThread, product: ProductProfile): boolean {
@@ -141,7 +142,7 @@ export async function POST(req: Request) {
         toScore,
         async (thread) => {
           const scoring = await scoreOpportunity(
-            { title: thread.title, body: thread.selftext, topComments: [] },
+            { title: thread.title, body: thread.selftext, topComments: thread.comments ?? [] },
             profile
           )
           return { thread, scoring }
@@ -169,6 +170,7 @@ export async function POST(req: Request) {
               redditPostUrl: `https://reddit.com${thread.permalink}`,
               redditPostTitle: thread.title,
               redditPostBody: thread.selftext || null,
+              topComments: thread.comments ?? [],
               redditAuthor: thread.author,
               redditScore: thread.score,
               redditCommentCount: thread.num_comments,
