@@ -2,7 +2,7 @@
 
 import { useState, Suspense } from 'react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
@@ -21,10 +21,12 @@ function LoginPageInner() {
 
 function LoginContent({ isSignup }: { isSignup: boolean }) {
   const [email, setEmail] = useState('')
-  const [sent, setSent] = useState(false)
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const supabase = createClient()
+  const router = useRouter()
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '')
 
@@ -35,20 +37,45 @@ function LoginContent({ isSignup }: { isSignup: boolean }) {
     })
   }
 
-  async function handleEmail(e: React.FormEvent) {
+  async function redirectAfterAuth() {
+    const res = await fetch('/api/auth/post-login', { method: 'POST' })
+    const { dest } = await res.json()
+    router.push(dest ?? '/dashboard')
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!email) return
+    if (!email || !password) return
     setLoading(true)
     setError('')
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: `${appUrl}/auth/callback` },
-    })
-    if (error) {
-      setError(error.message)
+
+    if (isSignup) {
+      if (password !== confirmPassword) {
+        setError('Passwords do not match.')
+        setLoading(false)
+        return
+      }
+      if (password.length < 8) {
+        setError('Password must be at least 8 characters.')
+        setLoading(false)
+        return
+      }
+      const { error } = await supabase.auth.signUp({ email, password })
+      if (error) {
+        setError(error.message)
+        setLoading(false)
+        return
+      }
     } else {
-      setSent(true)
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) {
+        setError(error.message)
+        setLoading(false)
+        return
+      }
     }
+
+    await redirectAfterAuth()
     setLoading(false)
   }
 
@@ -70,20 +97,6 @@ function LoginContent({ isSignup }: { isSignup: boolean }) {
           <p style={s.sub}>{isSignup ? 'Start finding high-intent Reddit leads today.' : 'Sign in to your Redgrow account.'}</p>
         </div>
 
-        {sent ? (
-          <div style={s.sentBox}>
-            <div style={s.sentIcon}>✉️</div>
-            <p style={s.sentTitle}>Check your inbox</p>
-            <p style={s.sentDesc}>
-              Magic link sent to <strong>{email}</strong>.<br />
-              Click it to sign in — no password needed.
-            </p>
-            <button onClick={() => setSent(false)} style={s.resend}>
-              Use a different email
-            </button>
-          </div>
-        ) : (
-          <>
             {/* Google */}
             <button onClick={handleGoogle} style={s.googleBtn}
               onMouseEnter={e => (e.currentTarget.style.background = '#f5f5f5')}
@@ -100,8 +113,8 @@ function LoginContent({ isSignup }: { isSignup: boolean }) {
               <span style={s.divLine} />
             </div>
 
-            {/* Email */}
-            <form onSubmit={handleEmail} style={s.form}>
+            {/* Email + Password form */}
+            <form onSubmit={handleSubmit} style={s.form}>
               <input
                 type="email"
                 placeholder="you@company.com"
@@ -112,19 +125,51 @@ function LoginContent({ isSignup }: { isSignup: boolean }) {
                 onFocus={e => (e.currentTarget.style.borderColor = '#E54B1B')}
                 onBlur={e => (e.currentTarget.style.borderColor = '#e5e7eb')}
               />
+              <input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                style={s.input}
+                onFocus={e => (e.currentTarget.style.borderColor = '#E54B1B')}
+                onBlur={e => (e.currentTarget.style.borderColor = '#e5e7eb')}
+              />
+              {isSignup && (
+                <input
+                  type="password"
+                  placeholder="Confirm password"
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  required
+                  style={s.input}
+                  onFocus={e => (e.currentTarget.style.borderColor = '#E54B1B')}
+                  onBlur={e => (e.currentTarget.style.borderColor = '#e5e7eb')}
+                />
+              )}
+              {!isSignup && (
+                <div style={{ textAlign: 'right', marginTop: -4 }}>
+                  <Link href="/forgot-password" style={s.forgotLink}>Forgot password?</Link>
+                </div>
+              )}
               {error && <p style={s.errorText}>{error}</p>}
               <button
                 type="submit"
-                disabled={loading || !email}
-                style={{ ...s.submitBtn, opacity: loading || !email ? 0.55 : 1 }}
-                onMouseEnter={e => { if (!loading && email) e.currentTarget.style.background = '#cf3f12' }}
+                disabled={loading || !email || !password}
+                style={{ ...s.submitBtn, opacity: loading || !email || !password ? 0.55 : 1 }}
+                onMouseEnter={e => { if (!loading && email && password) e.currentTarget.style.background = '#cf3f12' }}
                 onMouseLeave={e => { e.currentTarget.style.background = '#E54B1B' }}
               >
-                {loading ? 'Sending…' : 'Send magic link →'}
+                {loading ? (isSignup ? 'Creating account…' : 'Signing in…') : (isSignup ? 'Create account →' : 'Sign in →')}
               </button>
             </form>
-          </>
-        )}
+
+            <p style={s.switchMode}>
+              {isSignup ? 'Already have an account? ' : "Don't have an account? "}
+              <Link href={isSignup ? '/login' : '/login?mode=signup'} style={s.switchLink}>
+                {isSignup ? 'Sign in' : 'Sign up free'}
+              </Link>
+            </p>
 
         <p style={s.terms}>
           By continuing you agree to our{' '}
@@ -300,6 +345,12 @@ const s: Record<string, React.CSSProperties> = {
     transition: 'border-color .15s',
     boxSizing: 'border-box',
   },
+  forgotLink: {
+    fontSize: 12,
+    color: '#aaa',
+    textDecoration: 'none',
+    fontWeight: 500,
+  },
   errorText: {
     fontSize: 12,
     color: '#dc2626',
@@ -319,35 +370,17 @@ const s: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     transition: 'background .15s',
   },
-  sentBox: {
+  switchMode: {
     textAlign: 'center',
-    padding: '8px 0 12px',
-  },
-  sentIcon: {
-    fontSize: 40,
-    marginBottom: 12,
-  },
-  sentTitle: {
-    fontSize: 17,
-    fontWeight: 700,
-    color: '#111',
-    margin: '0 0 8px',
-  },
-  sentDesc: {
-    fontSize: 14,
-    color: '#777',
-    margin: '0 0 16px',
-    lineHeight: 1.6,
-  },
-  resend: {
-    background: 'none',
-    border: 'none',
-    color: '#E54B1B',
     fontSize: 13,
+    color: '#999',
+    marginTop: 14,
+    marginBottom: 0,
+  },
+  switchLink: {
+    color: '#E54B1B',
     fontWeight: 600,
-    cursor: 'pointer',
-    fontFamily: "'Plus Jakarta Sans', sans-serif",
-    textDecoration: 'underline',
+    textDecoration: 'none',
   },
   terms: {
     textAlign: 'center',
