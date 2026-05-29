@@ -367,11 +367,11 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
         const n = result.totalCreated ?? 0
         setScanMsg(n > 0 ? `${n} new lead${n !== 1 ? 's' : ''} found!` : `Scanned ${subreddits.length} subreddits — no new high-intent threads`)
         setTimeout(() => setScanMsg(''), 7000)
+        // Refresh again after 3 minutes so Apify-enriched comments populate
+        if (n > 0) setTimeout(() => router.refresh(), 3 * 60 * 1000)
       }
 
       router.refresh()
-      // Refresh again after 3 minutes so Apify-enriched comments populate
-      if (n > 0) setTimeout(() => router.refresh(), 3 * 60 * 1000)
     } catch (e) {
       setScanMsg('Scan failed — try again')
       setTimeout(() => setScanMsg(''), 5000)
