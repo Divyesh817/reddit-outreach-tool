@@ -20,6 +20,7 @@ function LoginPageInner() {
 }
 
 function LoginContent({ isSignup }: { isSignup: boolean }) {
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -60,7 +61,11 @@ function LoginContent({ isSignup }: { isSignup: boolean }) {
         setLoading(false)
         return
       }
-      const { error } = await supabase.auth.signUp({ email, password })
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { full_name: name.trim() } },
+      })
       if (error) {
         setError(error.message)
         setLoading(false)
@@ -115,6 +120,18 @@ function LoginContent({ isSignup }: { isSignup: boolean }) {
 
             {/* Email + Password form */}
             <form onSubmit={handleSubmit} style={s.form}>
+              {isSignup && (
+                <input
+                  type="text"
+                  placeholder="Your name"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  required
+                  style={s.input}
+                  onFocus={e => (e.currentTarget.style.borderColor = '#E54B1B')}
+                  onBlur={e => (e.currentTarget.style.borderColor = '#e5e7eb')}
+                />
+              )}
               <input
                 type="email"
                 placeholder="you@company.com"
