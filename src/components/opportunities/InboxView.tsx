@@ -370,6 +370,8 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
       }
 
       router.refresh()
+      // Refresh again after 3 minutes so Apify-enriched comments populate
+      if (n > 0) setTimeout(() => router.refresh(), 3 * 60 * 1000)
     } catch (e) {
       setScanMsg('Scan failed — try again')
       setTimeout(() => setScanMsg(''), 5000)
@@ -683,8 +685,13 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
                       No comments available for this thread.
                     </div>
                   ) : comments.length === 0 ? (
-                    <div style={{ padding: '14px 18px', background: S.card, border: `1px solid ${S.line}`, borderRadius: 12, fontSize: 14, color: S.text3 }}>
-                      No comments on this post yet.
+                    <div style={{ padding: '14px 18px', background: S.card, border: `1px solid ${S.line}`, borderRadius: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: S.orange2, flexShrink: 0 }}>
+                        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                      </svg>
+                      <span style={{ fontSize: 13, color: S.text3 }}>
+                        Comments are being fetched in the background — <span style={{ color: S.text2, fontWeight: 500 }}>check back in a few minutes.</span>
+                      </span>
                     </div>
                   ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

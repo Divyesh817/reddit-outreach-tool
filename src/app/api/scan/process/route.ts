@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { prisma } from '@/lib/prisma'
+import { inngest } from '@/lib/inngest'
 import { scoreOpportunity } from '@/lib/anthropic'
 import { PLAN_LIMITS } from '@/types'
 import type { ProductProfile, Plan } from '@/types'
@@ -192,6 +193,13 @@ export async function POST(req: Request) {
     }
 
     if (totalCreated > 0) break
+  }
+
+  // Fire async Inngest job to backfill comments via Apify for any leads that were created without them
+  if (totalCreated > 0) {
+    try {
+      await inngest.send({ name: 'scan/manual', data: { userId: user.id } })
+    } catch { /* non-fatal */ }
   }
 
   return NextResponse.json({ totalCreated, totalScanned, plan })

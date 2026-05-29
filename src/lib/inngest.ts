@@ -51,9 +51,20 @@ async function scanSubredditForProduct(
     if (thread.selftext === '[deleted]' || thread.selftext === '[removed]') continue
     if (thread.score < -3) continue
 
-    // Skip if already seen
-    const existing = await prisma.opportunity.findUnique({ where: { redditPostId: thread.id } })
-    if (existing) continue
+    // Skip if already seen — but backfill comments if they were empty (e.g. found via RSS scan first)
+    const existing = await prisma.opportunity.findUnique({
+      where: { redditPostId: thread.id },
+      select: { id: true, topComments: true },
+    })
+    if (existing) {
+      if (existing.topComments.length === 0 && thread.comments.length > 0) {
+        await prisma.opportunity.update({
+          where: { id: existing.id },
+          data: { topComments: thread.comments },
+        })
+      }
+      continue
+    }
 
     let scoring
     try {
