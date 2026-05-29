@@ -137,7 +137,7 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
   const [search, setSearch] = useState('')
   const [scanning, setScanning] = useState(false)
   const [scanMsg, setScanMsg] = useState('')
-  const [comments, setComments] = useState<{ author: string; body: string; score: number }[] | null>(null)
+  const [comments, setComments] = useState<{ author: string; body: string; score: number }[]>([])
   const [commentsLoading, setCommentsLoading] = useState(false)
   const [commentsError, setCommentsError] = useState('')
   const [commentReplies, setCommentReplies] = useState<Record<number, { text: string; whyThisWorks: string; loading: boolean; copied: boolean }>>({})
@@ -666,7 +666,6 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
                     left="Comments · reply opportunities"
                     right={
                       commentsLoading ? 'Loading…' :
-                      comments === null ? undefined :
                       comments.length === 0 ? 'No comments' :
                       `${comments.length} shown`
                     }
