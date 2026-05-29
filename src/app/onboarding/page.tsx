@@ -172,14 +172,40 @@ export default function OnboardingPage() {
 
   async function runInitialScan() {
     try {
-      const r = await fetch('/api/scan', { method: 'POST' })
-      const data = await r.json().catch(() => ({}))
-      setScanLeadsFound(data.totalCreated ?? 0)
-    } catch { /* non-fatal — user lands on dashboard anyway */ }
-    // Auto-navigate to dashboard after scan finishes (or fails)
+      // Step 1: get subreddits to scan
+      const prepRes = await fetch('/api/scan', { method: 'POST' })
+      const prep = await prepRes.json().catch(() => ({}))
+      const subreddits: { subredditId: string; subredditName: string; productId: string }[] = prep.subreddits ?? []
+
+      if (!subreddits.length) {
+        window.location.href = '/opportunities'
+        return
+      }
+
+      // Step 2: fetch Reddit threads via server proxy (no CORS)
+      const limit = prep.fetchLimit ?? 15
+      const subredditsData = await Promise.all(
+        subreddits.map(async ({ subredditId, subredditName, productId }) => {
+          const res = await fetch(`/api/reddit/threads?subreddit=${encodeURIComponent(subredditName)}&limit=${limit}`)
+          const data = await res.json().catch(() => ({ threads: [] }))
+          return { subredditId, productId, threads: data.threads ?? [] }
+        })
+      )
+
+      // Step 3: score threads + create opportunities
+      const processRes = await fetch('/api/scan/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subredditsData }),
+      })
+      const result = await processRes.json().catch(() => ({}))
+      setScanLeadsFound(result.totalCreated ?? 0)
+    } catch { /* non-fatal — user lands on inbox anyway */ }
+
+    // Brief pause to show result count, then redirect to inbox
     scanTimerRef.current = setTimeout(() => {
-      window.location.href = '/dashboard'
-    }, 1800)
+      window.location.href = '/opportunities'
+    }, 2000)
   }
 
   useEffect(() => {
@@ -425,13 +451,13 @@ export default function OnboardingPage() {
                     <span className="ob-dot-pulse" style={{ flexShrink: 0 }} />
                     <span style={{ fontSize: 13.5, color: '#3FB07A', fontWeight: 600 }}>
                       {scanLeadsFound > 0
-                        ? `Found ${scanLeadsFound} lead${scanLeadsFound !== 1 ? 's' : ''} — taking you to your inbox…`
+                        ? `Found ${scanLeadsFound} lead${scanLeadsFound !== 1 ? 's' : ''} — opening your inbox…`
                         : 'Scanning your subreddits for fresh intent signals…'}
                     </span>
                   </div>
                   <div className="ob-actions" style={{ marginTop: 24 }}>
-                    <span style={{ fontSize: 13, color: '#5E544A' }}>Taking you to dashboard automatically</span>
-                    <button className="ob-btn ob-btn-primary" onClick={() => { window.location.href = '/dashboard' }}>
+                    <span style={{ fontSize: 13, color: '#5E544A' }}>Taking you to your inbox automatically</span>
+                    <button className="ob-btn ob-btn-primary" onClick={() => { window.location.href = '/opportunities' }}>
                       Go now <span className="ob-arr">→</span>
                     </button>
                   </div>

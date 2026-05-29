@@ -143,7 +143,7 @@ async function scanSubredditForProduct(
 
 export const scanSubreddits = inngest.createFunction(
   { id: 'scan-subreddits', concurrency: { limit: 5 } },
-  { cron: '*/30 * * * *' },
+  { cron: '0 */6 * * *' },
   async ({ step }) => {
     const activeProducts = await step.run('fetch-products', async () => {
       return prisma.product.findMany({

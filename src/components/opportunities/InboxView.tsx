@@ -246,30 +246,10 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
     setCommentsLoading(true)
     setCommentsError('')
     try {
-      // Extract post ID from URL like https://reddit.com/r/sub/comments/{id}/title/
-      const postId = url.split('/comments/')[1]?.split('/')[0]
-      if (!postId) throw new Error('Could not parse post URL')
-      const jsonUrl = `https://www.reddit.com/comments/${postId}.json?limit=25&depth=1&raw_json=1`
-      const res = await fetch(jsonUrl)
-      if (!res.ok) throw new Error(`Reddit returned ${res.status}`)
+      const res = await fetch(`/api/reddit/comments?url=${encodeURIComponent(url)}`)
       const data = await res.json()
-      const children = data?.[1]?.data?.children ?? []
-      const fetched = children
-        .filter((c: any) =>
-          c.kind === 't1' &&
-          c.data?.body &&
-          c.data.body !== '[deleted]' &&
-          c.data.body !== '[removed]' &&
-          c.data.author !== 'AutoModerator' &&
-          c.data.author !== '[deleted]'
-        )
-        .slice(0, 10)
-        .map((c: any) => ({
-          author: c.data.author as string,
-          body: c.data.body as string,
-          score: c.data.score as number,
-        }))
-      setComments(fetched)
+      if (data.error) throw new Error(data.error)
+      setComments(data.comments ?? [])
     } catch (e: any) {
       setCommentsError(e.message ?? 'Failed to load comments')
       setComments([])
@@ -357,22 +337,13 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
 
       setScanMsg(`Fetching ${subreddits.length} subreddit${subreddits.length !== 1 ? 's' : ''}…`)
 
-      // Step 2: fetch Reddit threads from browser (bypasses Vercel IP blocks)
+      // Step 2: fetch Reddit threads via server proxy (avoids browser CORS block)
       const limit = prep.fetchLimit ?? 15
       const subredditsData = await Promise.all(
         subreddits.map(async ({ subredditId, subredditName, productId }) => {
-          const ua = 'Redgrow/1.0 (by /u/PastReaction341)'
-          const [nr, hr, tr] = await Promise.allSettled([
-            fetch(`https://www.reddit.com/r/${subredditName}/new.json?limit=${limit}`, { headers: { 'User-Agent': ua } }).then(r => r.json()),
-            fetch(`https://www.reddit.com/r/${subredditName}/hot.json?limit=${limit}`, { headers: { 'User-Agent': ua } }).then(r => r.json()),
-            fetch(`https://www.reddit.com/r/${subredditName}/top.json?limit=${limit}&t=day`, { headers: { 'User-Agent': ua } }).then(r => r.json()),
-          ])
-          const threads = [
-            ...(nr.status === 'fulfilled' ? (nr.value?.data?.children ?? []).map((c: any) => c.data) : []),
-            ...(hr.status === 'fulfilled' ? (hr.value?.data?.children ?? []).map((c: any) => c.data) : []),
-            ...(tr.status === 'fulfilled' ? (tr.value?.data?.children ?? []).map((c: any) => c.data) : []),
-          ]
-          return { subredditId, productId, threads }
+          const res = await fetch(`/api/reddit/threads?subreddit=${encodeURIComponent(subredditName)}&limit=${limit}`)
+          const data = await res.json().catch(() => ({ threads: [] }))
+          return { subredditId, productId, threads: data.threads ?? [] }
         })
       )
 
