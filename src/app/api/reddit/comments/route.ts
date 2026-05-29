@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
 
     const res = await fetch(jsonUrl, {
       headers: {
-        'User-Agent': 'Redgrow/1.0.0 (by /u/redgrow_app)',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept': 'application/json',
       },
       next: { revalidate: 0 },

@@ -337,15 +337,14 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
 
       setScanMsg(`Fetching ${subreddits.length} subreddit${subreddits.length !== 1 ? 's' : ''}…`)
 
-      // Step 2: fetch Reddit threads via server proxy (avoids browser CORS block)
+      // Step 2: fetch Reddit threads sequentially — parallel bursts trigger Reddit rate limits
       const limit = prep.fetchLimit ?? 15
-      const subredditsData = await Promise.all(
-        subreddits.map(async ({ subredditId, subredditName, productId }) => {
-          const res = await fetch(`/api/reddit/threads?subreddit=${encodeURIComponent(subredditName)}&limit=${limit}`)
-          const data = await res.json().catch(() => ({ threads: [] }))
-          return { subredditId, productId, threads: data.threads ?? [] }
-        })
-      )
+      const subredditsData: { subredditId: string; productId: string; threads: any[] }[] = []
+      for (const { subredditId, subredditName, productId } of subreddits) {
+        const res = await fetch(`/api/reddit/threads?subreddit=${encodeURIComponent(subredditName)}&limit=${limit}`)
+        const data = await res.json().catch(() => ({ threads: [] }))
+        subredditsData.push({ subredditId, productId, threads: data.threads ?? [] })
+      }
 
       const totalFetched = subredditsData.reduce((s, d) => s + d.threads.length, 0)
       if (!totalFetched) {
