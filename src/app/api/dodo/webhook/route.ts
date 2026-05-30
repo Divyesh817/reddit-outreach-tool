@@ -43,10 +43,23 @@ export async function POST(req: NextRequest) {
   const payload = event.data ?? event
 
   // Extract user ID from metadata (set during checkout session creation)
-  const userId: string =
+  let userId: string =
     payload?.metadata?.user_id ??
     payload?.subscription?.metadata?.user_id ??
     ''
+
+  // Fallback: look up user by email if metadata didn't carry user_id
+  if (!userId) {
+    const email: string =
+      payload?.customer?.email ??
+      payload?.subscription?.customer?.email ??
+      payload?.customer_email ??
+      ''
+    if (email) {
+      const found = await prisma.user.findFirst({ where: { email }, select: { id: true } })
+      if (found) userId = found.id
+    }
+  }
 
   const productId: string =
     payload?.product_id ??
