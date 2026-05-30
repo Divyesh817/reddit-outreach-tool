@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
         name: dbUser?.name ?? 'User',
       },
       metadata: { user_id: user.id, plan },
+      return_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?payment=success&plan=${plan}`,
     }),
   })
 

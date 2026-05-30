@@ -39,10 +39,28 @@ export function CheckoutModal({ plan, onClose }: Props) {
         DodoPayments.Initialize({
           mode: (process.env.NEXT_PUBLIC_DODO_MODE ?? 'live') as 'test' | 'live',
           displayType: 'inline',
-          onEvent: (event: any) => {
-            const t = event?.event_type ?? event?.type ?? ''
-            if (t === 'payment.succeeded' || t === 'checkout.completed') {
-              setTimeout(() => { window.location.href = '/dashboard' }, 2000)
+          onEvent: async (event: any) => {
+            const t = (event?.event_type ?? event?.type ?? '').toLowerCase()
+            console.log('[Dodo event]', t, event)
+
+            const isSuccess =
+              t === 'payment.succeeded' ||
+              t === 'checkout.completed' ||
+              t === 'payment_succeeded' ||
+              t === 'checkout_completed' ||
+              t.includes('success') ||
+              t.includes('complet')
+
+            if (isSuccess) {
+              // Activate plan directly — reliable even if webhook fails
+              try {
+                await fetch('/api/dodo/activate-plan', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ plan }),
+                })
+              } catch { /* non-fatal — webhook is backup */ }
+              setTimeout(() => { window.location.href = '/dashboard' }, 1500)
             }
           },
         })

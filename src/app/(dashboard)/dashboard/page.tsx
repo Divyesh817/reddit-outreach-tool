@@ -19,12 +19,25 @@ async function getStats(userId: string) {
   return { queued, posted, accountHealth, product: products[0] ?? null }
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: { payment?: string; plan?: string }
+}) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
   const userId = user.id
+
+  // Fallback: if Dodo redirected here with ?payment=success, activate plan in DB
+  if (searchParams.payment === 'success' && searchParams.plan) {
+    const plan = searchParams.plan.toUpperCase()
+    if (plan === 'STARTER' || plan === 'GROWTH') {
+      await prisma.user.update({ where: { id: userId }, data: { plan } }).catch(() => {})
+    }
+    redirect('/dashboard')
+  }
   const firstName = user.user_metadata?.full_name?.split(' ')[0] ?? user.email?.split('@')[0] ?? 'there'
   const { queued, posted, accountHealth, product } = await getStats(userId)
 
