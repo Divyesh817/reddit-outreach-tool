@@ -198,7 +198,7 @@ function LoginContent({ isSignup }: { isSignup: boolean }) {
 
       {/* Trust row */}
       <div style={s.trust}>
-        {['No credit card required', 'Free 7-day trial', 'Cancel anytime'].map(t => (
+        {['No credit card required', 'Cancel anytime', 'Plans from $9/mo'].map(t => (
           <span key={t} style={s.trustPill}>{t}</span>
         ))}
       </div>

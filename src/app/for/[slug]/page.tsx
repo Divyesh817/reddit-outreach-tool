@@ -269,7 +269,7 @@ const pages: Record<string, Page> = {
       { number: '03', heading: 'Separate editorial from promotional', body: 'Maintain a 4:1 ratio of genuinely helpful comments to product-promotional ones. This isn\'t just rule-following — the helpful comments build the account\'s reputation and make promotional comments land better.' },
       { number: '04', heading: 'Track thread engagement, not just posts', body: 'The real value of Reddit is in the conversations that follow your initial comment. When someone replies positively, continue the thread. Those extended conversations are where conversions happen.' },
     ],
-    callout: "Redgrow Agency plan: $49/month for up to 10 products. One dashboard for your full client portfolio. Each client has their own subreddit watchlist, opportunity queue, and reply history. Start a 7-day free trial — no credit card required.",
+    callout: "Redgrow Agency plan: $49/month for up to 10 products. One dashboard for your full client portfolio. Each client has their own subreddit watchlist, opportunity queue, and reply history. Get started today — cancel anytime.",
     related: [
       { href: '/for/saas-founders', label: 'Reddit marketing for SaaS founders' },
       { href: '/best/reddit-marketing-tools-for-saas-founders', label: 'Best Reddit marketing tools for SaaS founders' },

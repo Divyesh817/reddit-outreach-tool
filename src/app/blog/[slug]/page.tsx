@@ -428,7 +428,7 @@ const posts: Record<string, {
         <ol>
           <li>Hi! Have you tried [Product]?</li>
           <li>It does X, Y, and Z.</li>
-          <li>There's a free trial at [link].</li>
+          <li>Redgrow plans start at $9/mo with no contracts.</li>
         </ol>
         <p>Every Reddit user has pattern-matched this format as spam. It opens with the product, lists features, and drops a link. Even if your product is genuinely the best answer to their question, this reply gets ignored or downvoted because it reads as marketing copy, not community participation.</p>
         <img
@@ -545,7 +545,7 @@ export default function BlogPostPage({ params }: { params: { slug: string } }) {
         <div className="post-cta">
           <h3>Find your Reddit buyers automatically</h3>
           <p>Redgrow monitors subreddits 24/7, scores threads by buying intent, and drafts replies for your review. From $9/mo.</p>
-          <a href="/login" className="post-cta-btn">Start free trial →</a>
+          <a href="/login" className="post-cta-btn">Get started →</a>
         </div>
       </div>
 

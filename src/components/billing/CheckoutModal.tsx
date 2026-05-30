@@ -42,8 +42,7 @@ export function CheckoutModal({ plan, onClose }: Props) {
           onEvent: (event: any) => {
             const t = event?.event_type ?? event?.type ?? ''
             if (t === 'payment.succeeded' || t === 'checkout.completed') {
-              // Reload after slight delay so webhook can process
-              setTimeout(() => { window.location.href = '/settings?upgraded=1' }, 2000)
+              setTimeout(() => { window.location.href = '/dashboard' }, 2000)
             }
           },
         })

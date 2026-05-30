@@ -28,8 +28,8 @@ const faqs = [
     a: "GEO (Generative Engine Optimization) is about showing up in AI search answers. ChatGPT, Claude, Perplexity, and Gemini all cite Reddit threads in their answers. Every reply you post on Reddit today becomes a data point AI cites tomorrow. Redgrow shows you the highest-GEO-signal threads to maximise this effect.",
   },
   {
-    q: 'Is there a free trial?',
-    a: "Yes — 14 days free on any plan. No credit card required to start. Cancel anytime, and we'll refund your first payment if you change your mind within 14 days.",
+    q: 'Can I cancel anytime?',
+    a: "Yes — cancel anytime from your settings, no questions asked. Plans are billed monthly with no long-term contracts.",
   },
   {
     q: 'How fresh are the leads?',

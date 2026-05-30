@@ -202,7 +202,7 @@ export default function LandingPage() {
                 Redgrow scans Reddit every hour. It scores each thread for buying intent and writes a reply draft. You copy it and paste it yourself. Your account. Your words. Zero ban risk.
               </p>
               <div className="hero-ctas reveal">
-                <Link href="/login?mode=signup" className="btn btn-orange btn-lg">Start free trial <span className="arr">→</span></Link>
+                <Link href="/login?mode=signup" className="btn btn-orange btn-lg">Get started <span className="arr">→</span></Link>
                 <Link href="#how" className="btn btn-ghost btn-lg">See how it works</Link>
               </div>
               <div className="meta-row reveal">
@@ -771,7 +771,7 @@ export default function LandingPage() {
           <div className="reddit-mark-big" />
           <h2>Stop scrolling. <em>Start showing up.</em></h2>
           <p>Reddit has 500M active users — and AI search is citing their conversations daily. Thousands of warm leads are asking for your product right now. Redgrow finds them, drafts the reply, you paste it. That&apos;s it.</p>
-          <Link href="/login?mode=signup" className="btn btn-orange btn-lg" style={{ marginTop: '10px' }}>Start your free trial <span className="arr">→</span></Link>
+          <Link href="/login?mode=signup" className="btn btn-orange btn-lg" style={{ marginTop: '10px' }}>Get started <span className="arr">→</span></Link>
           <div className="trust-row">
             <span>Starts at $9/mo</span><span className="dot"></span>
             <span>14-day money-back</span><span className="dot"></span>

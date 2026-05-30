@@ -57,7 +57,7 @@ export default function AboutPage() {
             <div className="eyebrow" style={{ marginBottom: '12px' }}>Contact</div>
             <p>Questions, partnerships, or just want to chat about Reddit growth strategy? Email us at <strong>div@redgrow.app</strong> — we respond to every message within 24 hours.</p>
             <div style={{ marginTop: '18px' }}>
-              <Link href="/login" className="btn btn-orange">Start free trial <span className="arr">→</span></Link>
+              <Link href="/login" className="btn btn-orange">Get started <span className="arr">→</span></Link>
             </div>
           </div>
         </div>
