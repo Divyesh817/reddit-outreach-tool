@@ -163,7 +163,33 @@ export async function POST(req: Request) {
         if (scoring.intentScore < minIntentScore) continue
         const threadDate = new Date(thread.created_utc * 1000)
         try {
-          const opp = await prisma.opportunity.create({
+          // Fetch comments via per-post RSS (different CDN path, less blocked than JSON API)
+          let topComments: string[] = thread.comments ?? []
+          if (topComments.length === 0) {
+            try {
+              const rssRes = await fetch(
+                `https://www.reddit.com/comments/${thread.id}.rss?limit=8`,
+                { headers: { 'User-Agent': 'Feedly/1.0 (+https://feedly.com/fetcher.html)' }, next: { revalidate: 0 } }
+              )
+              if (rssRes.ok) {
+                const xml = await rssRes.text()
+                const entries: string[] = []
+                const re = /<entry>([\s\S]*?)<\/entry>/g
+                let em: RegExpExecArray | null
+                let skip = true // first entry is the post itself
+                while ((em = re.exec(xml)) !== null) {
+                  if (skip) { skip = false; continue }
+                  const content = em[1].match(/<content[^>]*>([\s\S]*?)<\/content>/)?.[1] ?? ''
+                  const text = content.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0, 300)
+                  if (text.length > 10) entries.push(text)
+                  if (entries.length >= 5) break
+                }
+                if (entries.length > 0) topComments = entries
+              }
+            } catch { /* non-fatal */ }
+          }
+
+          await prisma.opportunity.create({
             data: {
               productId,
               subredditId,
@@ -171,7 +197,7 @@ export async function POST(req: Request) {
               redditPostUrl: `https://reddit.com${thread.permalink}`,
               redditPostTitle: thread.title,
               redditPostBody: thread.selftext || null,
-              topComments: thread.comments ?? [],
+              topComments,
               redditAuthor: thread.author,
               redditScore: thread.score,
               redditCommentCount: thread.num_comments,

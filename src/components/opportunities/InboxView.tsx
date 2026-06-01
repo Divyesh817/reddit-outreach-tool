@@ -242,15 +242,45 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
     loadStoredComments(opp)
   }
 
-  function loadStoredComments(opp: Opportunity) {
+  async function loadStoredComments(opp: Opportunity) {
     const stored = (opp.topComments ?? []).filter(Boolean)
     if (stored.length > 0) {
       setComments(stored.map(body => ({ author: '', body, score: 0 })))
-    } else {
+      setCommentsLoading(false)
+      setCommentsError('')
+      return
+    }
+    // No stored comments — try live browser fetch (user's IP bypasses Vercel block)
+    setCommentsLoading(true)
+    setCommentsError('')
+    try {
+      const postId = opp.redditPostUrl.split('/comments/')[1]?.split('/')[0]
+      if (!postId) throw new Error('no id')
+      const res = await fetch(
+        `https://www.reddit.com/comments/${postId}.json?limit=8&depth=1&raw_json=1`
+      )
+      if (!res.ok) throw new Error(`${res.status}`)
+      const data = await res.json()
+      const fetched = (data?.[1]?.data?.children ?? [])
+        .filter((c: any) =>
+          c.kind === 't1' &&
+          c.data?.body &&
+          c.data.body !== '[deleted]' &&
+          c.data.body !== '[removed]' &&
+          c.data.author !== 'AutoModerator'
+        )
+        .slice(0, 8)
+        .map((c: any) => ({
+          author: c.data.author as string,
+          body: c.data.body as string,
+          score: c.data.score as number,
+        }))
+      setComments(fetched)
+    } catch {
       setComments([])
+      setCommentsError('unavailable')
     }
     setCommentsLoading(false)
-    setCommentsError('')
   }
 
   function navigateRelative(delta: number) {
@@ -367,8 +397,6 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
         const n = result.totalCreated ?? 0
         setScanMsg(n > 0 ? `${n} new lead${n !== 1 ? 's' : ''} found!` : `Scanned ${subreddits.length} subreddits — no new high-intent threads`)
         setTimeout(() => setScanMsg(''), 7000)
-        // Refresh again after 3 minutes so Apify-enriched comments populate
-        if (n > 0) setTimeout(() => router.refresh(), 3 * 60 * 1000)
       }
 
       router.refresh()
