@@ -76,7 +76,7 @@ export const PLAN_LIMITS: Record<Plan, {
   GROWTH: {
     products: 5,
     opportunitiesPerMonth: 2000,
-    repliesPerMonth: 500,
+    repliesPerMonth: 300,
     price: 19,
     scansPerDay: 9999,
     threadsPerSubreddit: 100,

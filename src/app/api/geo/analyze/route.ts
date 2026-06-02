@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase/server'
 import { prisma } from '@/lib/prisma'
 import { runGeoAnalysis } from '@/lib/anthropic'
 
+const GEO_MONTHLY_LIMIT: Record<string, number> = { FREE: 1, STARTER: 10, GROWTH: 50 }
+
 function currentWeekOf(): Date {
   const now = new Date()
   const dayOfWeek = now.getUTCDay()
@@ -21,10 +23,24 @@ export async function POST(req: NextRequest) {
     const { productId } = await req.json()
     if (!productId) return NextResponse.json({ error: 'productId required' }, { status: 400 })
 
-    const product = await prisma.product.findFirst({
-      where: { id: productId, userId: user.id, isActive: true },
-    })
+    const [product, dbUser] = await Promise.all([
+      prisma.product.findFirst({ where: { id: productId, userId: user.id, isActive: true } }),
+      prisma.user.findUnique({ where: { id: user.id }, select: { plan: true } }),
+    ])
     if (!product) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+    const plan = dbUser?.plan ?? 'FREE'
+    const monthlyLimit = GEO_MONTHLY_LIMIT[plan] ?? 1
+    const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0)
+    const usedThisMonth = await prisma.geoReport.count({
+      where: { userId: user.id, createdAt: { gte: monthStart } },
+    })
+    if (usedThisMonth >= monthlyLimit) {
+      return NextResponse.json({
+        error: `GEO analysis limit reached (${monthlyLimit}/month on ${plan} plan). Upgrade to run more.`,
+        limitReached: true,
+      }, { status: 429 })
+    }
 
     let analysis
     try {

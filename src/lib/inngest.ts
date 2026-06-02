@@ -4,7 +4,7 @@ import { Resend } from 'resend'
 import { prisma } from '@/lib/prisma'
 import { fetchNewThreads, checkDailyPostingLimit, checkSubredditCooldown,
          checkCommentVisible, postReply } from '@/lib/reddit'
-import { scoreOpportunity, generateReply, generateWarmupComment, runGeoAnalysis } from '@/lib/anthropic'
+import { batchScoreOpportunities, generateReply, generateWarmupComment, runGeoAnalysis } from '@/lib/anthropic'
 import { sendWelcomeEmail, sendHighIntentAlert, sendDailyDigest, sendWeeklySummary } from '@/lib/emails'
 import type { ProductProfile } from '@/types'
 
@@ -151,16 +151,15 @@ async function scanSubredditForProduct(
 
     const toScore = candidates.filter(t => !existingIds.has(t.id)).slice(0, 15)
 
-    for (const thread of toScore) {
-      let scoring
-      try {
-        scoring = await scoreOpportunity(
-          { title: thread.title, body: thread.selftext, topComments: [] },
-          profile
-        )
-      } catch { continue }
+    const scores = await batchScoreOpportunities(
+      toScore.map(t => ({ id: t.id, title: t.title, body: t.selftext })),
+      profile
+    )
 
-      if (scoring.intentScore < minScore) continue
+    for (let i = 0; i < toScore.length; i++) {
+      const thread = toScore[i]
+      const scoring = scores[i]
+      if (!scoring || scoring.intentScore < minScore) continue
 
       const topComments = await fetchCommentsRss(thread.id)
 
@@ -224,38 +223,34 @@ async function scanSubredditForProduct(
   return created
 }
 
-// ─── Job 1: Scan subreddits for new threads ───────────────────────────────────
-// Uses public Reddit JSON API — no user OAuth, no account, zero ban risk.
-
-export const scanSubreddits = inngest.createFunction(
-  { id: 'scan-subreddits', concurrency: { limit: 5 } },
-  { cron: '0 */3 * * *' },
-  async ({ step }) => {
-    const activeProducts = await step.run('fetch-products', async () => {
-      return prisma.product.findMany({
-        where: { isActive: true },
-        select: {
-          id: true, userId: true, url: true, name: true, description: true,
-          targetAudience: true, keyBenefits: true, competitors: true, summary: true,
-          subreddits: { where: { isActive: true, isBlacklisted: false }, select: { id: true, name: true } },
-        },
-      })
-    })
-
-    let totalCreated = 0
-
-    for (const product of activeProducts) {
-      for (const subreddit of product.subreddits) {
-        const created = await step.run(`scan-${product.id}-${subreddit.name}`, () =>
-          scanSubredditForProduct(product, subreddit)
-        )
-        totalCreated += created
-      }
-    }
-
-    return { totalCreated }
-  }
-)
+// ─── Job 1: Scan subreddits for new threads (PAUSED — re-enable when ready) ───
+// export const scanSubreddits = inngest.createFunction(
+//   { id: 'scan-subreddits', concurrency: { limit: 5 } },
+//   { cron: '0 */3 * * *' },
+//   async ({ step }) => {
+//     const activeProducts = await step.run('fetch-products', async () => {
+//       return prisma.product.findMany({
+//         where: { isActive: true },
+//         select: {
+//           id: true, userId: true, url: true, name: true, description: true,
+//           targetAudience: true, keyBenefits: true, competitors: true, summary: true,
+//           subreddits: { where: { isActive: true, isBlacklisted: false }, select: { id: true, name: true } },
+//         },
+//       })
+//     })
+//     let totalCreated = 0
+//     for (const product of activeProducts) {
+//       for (const subreddit of product.subreddits) {
+//         const created = await step.run(`scan-${product.id}-${subreddit.name}`, () =>
+//           scanSubredditForProduct(product, subreddit)
+//         )
+//         totalCreated += created
+//       }
+//     }
+//     return { totalCreated }
+//   }
+// )
+export const scanSubreddits = { } as any // placeholder while paused
 
 // ─── Job 2: Post approved replies ─────────────────────────────────────────────
 

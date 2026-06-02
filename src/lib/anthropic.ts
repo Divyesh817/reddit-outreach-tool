@@ -127,6 +127,60 @@ shouldPitch = false if: thread is just venting with no solution-seeking, thread 
   return parseJSON(text) as ScoringResult
 }
 
+// ─── Batch Intent Scoring (Haiku — 1 call for up to 15 threads) ──────────────
+
+export async function batchScoreOpportunities(
+  threads: { id: string; title: string; body: string }[],
+  product: ProductProfile
+): Promise<ScoringResult[]> {
+  if (!threads.length) return []
+
+  const threadList = threads.map((t, i) =>
+    `[${i}] ID:${t.id}\nTITLE: ${t.title}\nBODY: ${t.body?.slice(0, 300) || '(no body)'}`
+  ).join('\n\n')
+
+  const response = await client.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 1500,
+    messages: [{
+      role: 'user',
+      content: `You are scoring Reddit threads for buying intent relevant to a specific product.
+
+PRODUCT SUMMARY:
+${product.summary}
+COMPETITORS: ${product.competitors.join(', ') || 'none'}
+
+PAIN TYPES:
+- competitor_frustration: mentions a competitor negatively
+- switching_intent: actively looking to switch tools right now
+- active_tool_search: asking for tool recommendations
+- roi_frustration: using tools but getting no results or ROI
+- workflow_pain: struggling with the core problem the product solves
+
+THREADS TO SCORE:
+${threadList}
+
+Return ONLY a valid JSON array with one entry per thread, in the same order:
+[
+  {"id":"<thread id>","intentScore":0-100,"painType":"one of the 5 types","shouldPitch":true,"reasoning":"1 sentence"},
+  ...
+]
+
+shouldPitch = false only if the thread is hostile to marketing or pitching would get downvoted.
+Return exactly ${threads.length} entries. No markdown, no explanation.`
+    }]
+  })
+
+  const text = response.content[0].type === 'text' ? response.content[0].text : '[]'
+  try {
+    const results = parseJSON(text) as ScoringResult[]
+    // Ensure every thread gets a result, fill missing with score 0
+    return threads.map((t, i) => results[i] ?? { intentScore: 0, painType: 'workflow_pain', shouldPitch: false, reasoning: '' })
+  } catch {
+    return threads.map(() => ({ intentScore: 0, painType: 'workflow_pain' as PainType, shouldPitch: false, reasoning: '' }))
+  }
+}
+
 // ─── Reply Generation ─────────────────────────────────────────────────────────
 
 export async function generateReply(
@@ -156,7 +210,7 @@ export async function generateReply(
     max_tokens: 600,
     messages: [{
       role: 'user',
-      content: `You are writing a Reddit reply on behalf of a founder. The reply must sound like a real human, not a marketer.
+      content: `You are writing a Reddit reply on behalf of a founder. Write it as a real human would type it — casual, direct, no AI tells.
 
 PRODUCT: ${product.name}
 PRODUCT URL: ${product.url}
@@ -167,68 +221,32 @@ THREAD TITLE: ${thread.title}
 THREAD BODY: ${thread.body || '(no body)'}
 
 PAIN TYPE: ${painType}
-TONE INSTRUCTION: ${toneInstructions[painType]}
+TONE: ${toneInstructions[painType]}
 PITCH RULE: ${pitchInstruction}
 
-STRICT RULES:
-- Never start with the product name
-- Never use phrases like "I'd recommend", "You should check out", "As a [job title]"
-- Never use bullet points unless the thread specifically warrants a list
-- Max 140 words unless a longer reply would genuinely help
-- Match the casual/professional tone of r/${thread.subreddit}
+REPLY RULES (follow all):
+- 50–100 words. Cut anything that doesn't add value
+- Use contractions (don't, it's, you're, I've, can't)
+- Never start with "I" — vary the opening each time
+- Never use: "certainly", "absolutely", "I understand", "great question", "I hope this helps", "feel free to", "essentially", "ultimately"
+- No bullet points unless the thread is a list-style question
+- 1–2 short paragraphs max
+- Match the tone of r/${thread.subreddit} — casual or professional as appropriate
 - Sound like a peer, not a marketer
-- Vary the opening — never start with "I've been in your exact situation"
-- If including the product link, use Reddit markdown: [Product Name](url)
+- Add one small natural touch if it fits: an em dash, "tbh", "honestly", "ngl"
+- If including product link, use Reddit markdown: [Product Name](url)
 
 Return ONLY valid JSON, no markdown:
 {
-  "text": "the full reply text",
-  "toneUsed": "brief description of tone e.g. empathetic peer, direct advisor",
-  "whyThisWorks": "1 sentence explaining why this reply will resonate with this specific person"
+  "text": "the reply — ready to post, no editing needed",
+  "toneUsed": "brief description e.g. empathetic peer, direct advisor",
+  "whyThisWorks": "1 sentence on why this resonates with this specific person"
 }`
     }]
   })
 
   const text = response.content[0].type === 'text' ? response.content[0].text : ''
-  const result = parseJSON(text) as ReplyResult
-  result.text = await humaniseReply(result.text, thread.subreddit)
-  return result
-}
-
-// ─── Humanising Filter ───────────────────────────────────────────────────────
-
-async function humaniseReply(text: string, subreddit: string): Promise<string> {
-  try {
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 300,
-      messages: [{
-        role: 'user',
-        content: `You are editing a Reddit reply to make it sound like a real person typed it quickly, not an AI.
-
-SUBREDDIT: r/${subreddit}
-ORIGINAL REPLY:
-${text}
-
-EDITING RULES:
-- Target 50–90 words. Cut ruthlessly — remove any sentence that doesn't add real value
-- Use contractions everywhere (don't, it's, you're, can't, I've)
-- Remove: "certainly", "absolutely", "I understand", "great question", "I hope this helps", "feel free to", "I would suggest", "it's worth noting", "essentially", "ultimately"
-- No bullet points or numbered lists unless the original had them for a structural reason
-- No multi-paragraph walls of text — 1-2 short paragraphs max
-- Keep any product links exactly as they are ([Name](url) format)
-- If the reply starts with "I", rewrite the opening so it doesn't
-- Add one small natural imperfection if appropriate (a casual phrase, an em dash, a "tbh", "honestly", "ngl") — but only if it fits
-- Do NOT change the core message, advice, or any facts
-
-Return ONLY the edited reply text. No explanation, no JSON, just the reply.`
-      }]
-    })
-    const edited = response.content[0].type === 'text' ? response.content[0].text.trim() : text
-    return edited || text
-  } catch {
-    return text
-  }
+  return parseJSON(text) as ReplyResult
 }
 
 // ─── Comment Reply Generator ─────────────────────────────────────────────────
@@ -263,9 +281,11 @@ PITCH RULE: ${pitchInstruction}
 
 RULES:
 - Directly address what u/${comment.author} said — don't ignore their specific point
-- Keep it conversational and short (50–100 words)
-- Never start with "Great point" or "Absolutely" or sycophantic openers
-- Sound like a peer responding in a thread, not a brand
+- 40–80 words, conversational, ready to post
+- Use contractions (don't, it's, can't, I've)
+- Never start with "Great point", "Absolutely", "Certainly", or sycophantic openers
+- Never start with "I" — vary the opening
+- Sound like a peer, not a brand
 - Match the tone of r/${thread.subreddit}
 
 Return ONLY valid JSON, no markdown:
@@ -277,9 +297,7 @@ Return ONLY valid JSON, no markdown:
   })
 
   const raw = response.content[0].type === 'text' ? response.content[0].text : ''
-  const result = JSON.parse(raw) as { text: string; whyThisWorks: string }
-  result.text = await humaniseReply(result.text, thread.subreddit)
-  return result
+  return parseJSON(raw) as { text: string; whyThisWorks: string }
 }
 
 // ─── Keyword Suggestions ─────────────────────────────────────────────────────

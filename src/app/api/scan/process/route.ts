@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { prisma } from '@/lib/prisma'
-import { scoreOpportunity } from '@/lib/anthropic'
+import { batchScoreOpportunities } from '@/lib/anthropic'
 import { PLAN_LIMITS } from '@/types'
 import type { ProductProfile, Plan } from '@/types'
 
@@ -36,23 +36,6 @@ function passesIntentPreFilter(thread: RawThread, product: ProductProfile): bool
   return HIGH_INTENT_PATTERNS.some(p => text.includes(p))
 }
 
-async function concurrent<T>(
-  items: T[],
-  fn: (item: T) => Promise<any>,
-  limit = 5
-): Promise<PromiseSettledResult<any>[]> {
-  const results: PromiseSettledResult<any>[] = new Array(items.length)
-  let idx = 0
-  async function worker() {
-    while (idx < items.length) {
-      const i = idx++
-      try { results[i] = { status: 'fulfilled', value: await fn(items[i]) } }
-      catch (e) { results[i] = { status: 'rejected', reason: e } }
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
-  return results
-}
 
 
 export async function POST(req: Request) {
@@ -137,28 +120,16 @@ export async function POST(req: Request) {
 
       const toScore = candidates.filter(t => !existingIds.has(t.id)).slice(0, 15)
 
-      const scoringResults = await concurrent(
-        toScore,
-        async (thread) => {
-          const scoring = await scoreOpportunity(
-            { title: thread.title, body: thread.selftext, topComments: thread.comments ?? [] },
-            profile
-          )
-          return { thread, scoring }
-        },
-        5
+      // Single batch call to Haiku — 1 API call instead of 15
+      const scores = await batchScoreOpportunities(
+        toScore.map(t => ({ id: t.id, title: t.title, body: t.selftext })),
+        profile
       )
 
-      const allFailed = scoringResults.length > 0 && scoringResults.every(r => r.status === 'rejected')
-      if (allFailed) {
-        const err = (scoringResults[0] as PromiseRejectedResult).reason
-        return NextResponse.json({ error: `AI scoring failed: ${err?.message ?? err}`, totalCreated: 0 }, { status: 500 })
-      }
-
-      for (const result of scoringResults) {
-        if (result.status !== 'fulfilled') continue
-        const { thread, scoring } = result.value
-        if (scoring.intentScore < minIntentScore) continue
+      for (let i = 0; i < toScore.length; i++) {
+        const thread = toScore[i]
+        const scoring = scores[i]
+        if (!scoring || scoring.intentScore < minIntentScore) continue
         const threadDate = new Date(thread.created_utc * 1000)
         try {
           await prisma.opportunity.create({

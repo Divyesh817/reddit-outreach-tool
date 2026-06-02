@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
   let logoUrl: string | null = null
   try {
     const domain = new URL(url).hostname
-    logoUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`
+    logoUrl = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=64`
   } catch { /* non-fatal */ }
 
   // Create product

@@ -4,26 +4,13 @@ export const maxDuration = 300
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { prisma } from '@/lib/prisma'
-import { scoreOpportunity } from '@/lib/anthropic'
+import { batchScoreOpportunities } from '@/lib/anthropic'
 import type { ProductProfile } from '@/types'
 
 const LOOKBACK_DAYS = 21
 const SCORE_THRESHOLD = 40
 const BATCH_SIZE = 100
 
-async function concurrent<T>(items: T[], fn: (item: T) => Promise<any>, limit = 5) {
-  const results: PromiseSettledResult<any>[] = new Array(items.length)
-  let idx = 0
-  async function worker() {
-    while (idx < items.length) {
-      const i = idx++
-      try { results[i] = { status: 'fulfilled', value: await fn(items[i]) } }
-      catch (e) { results[i] = { status: 'rejected', reason: e } }
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
-  return results
-}
 
 async function fetchFromPullpush(subreddit: string, after: number, before: number) {
   const url = `https://api.pullpush.io/reddit/search/submission/?subreddit=${encodeURIComponent(subreddit)}&sort=desc&size=${BATCH_SIZE}&after=${after}&before=${before}`
@@ -96,18 +83,15 @@ export async function POST() {
       if (!toScore.length) continue
       totalScored += toScore.length
 
-      const results = await concurrent(toScore, async (thread: any) => {
-        const scoring = await scoreOpportunity(
-          { title: thread.title, body: thread.selftext, topComments: [] },
-          profile
-        )
-        return { thread, scoring }
-      }, 5)
+      const scores = await batchScoreOpportunities(
+        toScore.map((t: any) => ({ id: t.id, title: t.title, body: t.selftext })),
+        profile
+      )
 
-      for (const r of results) {
-        if (r.status !== 'fulfilled') continue
-        const { thread, scoring } = r.value
-        if (scoring.intentScore < SCORE_THRESHOLD) continue
+      for (let i = 0; i < toScore.length; i++) {
+        const thread = toScore[i]
+        const scoring = scores[i]
+        if (!scoring || scoring.intentScore < SCORE_THRESHOLD) continue
         try {
           await prisma.opportunity.create({
             data: {

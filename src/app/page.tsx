@@ -49,7 +49,7 @@ const jsonLd = {
   offers: [
     { '@type': 'Offer', price: '0', priceCurrency: 'USD', name: 'Free plan', description: '100 opportunities per month, 10 reply drafts, 1 product' },
     { '@type': 'Offer', price: '9', priceCurrency: 'USD', name: 'Starter plan', description: '500 opportunities per month, 150 reply drafts, 3 products', billingIncrement: 'P1M' },
-    { '@type': 'Offer', price: '19', priceCurrency: 'USD', name: 'Growth plan', description: '2000 opportunities per month, 500 reply drafts, 5 products', billingIncrement: 'P1M' },
+    { '@type': 'Offer', price: '19', priceCurrency: 'USD', name: 'Growth plan', description: '2000 opportunities per month, 300 reply drafts, 5 products', billingIncrement: 'P1M' },
   ],
   creator: {
     '@type': 'Person',
@@ -729,7 +729,7 @@ export default function LandingPage() {
                 <p style={{ margin: '8px 0 0', fontSize: 14, color: 'var(--text3)', lineHeight: 1.55 }}>For teams running Reddit as a serious acquisition channel.</p>
               </div>
               <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 9, flex: 1 }}>
-                {['5 products', '2,000 opps / month', '500 reply drafts', 'Unlimited scans', '30 subreddits per product', 'GEO analysis', 'Fast support'].map(f => (
+                {['5 products', '2,000 opps / month', '300 reply drafts', 'Unlimited scans', '30 subreddits per product', 'GEO analysis', 'Fast support'].map(f => (
                   <li key={f} style={{ fontSize: 14.5, color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 9 }}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--green)" strokeWidth="2.8"><polyline points="20 6 9 17 4 12"/></svg>
                     {f}

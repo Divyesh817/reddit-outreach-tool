@@ -84,7 +84,7 @@ export function BillingSection({ plan, oppsThisMonth, repliesThisMonth, upgradeO
           />
           <PlanCard
             name="Growth" price="$19/mo"
-            features={['5 products', '2,000 opps/mo', '500 replies/mo', 'Unlimited scans']}
+            features={['5 products', '2,000 opps/mo', '300 replies/mo', 'Unlimited scans']}
             isCurrent={plan === 'GROWTH'}
             highlight={true}
             canCancel={plan === 'GROWTH' && !!hasSubscription}
