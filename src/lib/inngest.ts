@@ -73,7 +73,7 @@ async function scanSubredditForProduct(
       )
     } catch { continue }
 
-    if (scoring.intentScore < 60) continue
+    if (scoring.intentScore < 65) continue
 
     const opportunity = await prisma.opportunity.create({
       data: {

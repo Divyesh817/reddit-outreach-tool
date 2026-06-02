@@ -83,9 +83,12 @@ export async function POST(req: Request) {
   const remainingOpps = limits.opportunitiesPerMonth - oppsThisMonth
   const perScanCap = Math.min(remainingOpps, limits.threadsPerSubreddit)
 
-  const base = Math.max(limits.lookbackHours, 24)
-  const lookbackWindows = Array.from(new Set([base, Math.max(base, 72), Math.max(base * 2, 96)]))
-  const intentThresholds = [60, 60, 60]
+  const MIN_LEADS = 7 // keep scanning until we have at least this many
+
+  const base = Math.max(limits.lookbackHours, 48)
+  const lookbackWindows = Array.from(new Set([base, Math.max(base, 96), Math.max(base * 2, 168)]))
+  // 65 is the hard floor — never show anything below this
+  const intentThresholds = [65, 65, 65]
 
   let totalCreated = 0
   let totalScanned = 0
@@ -137,7 +140,7 @@ export async function POST(req: Request) {
         })).map(o => o.redditPostId)
       )
 
-      const toScore = candidates.filter(t => !existingIds.has(t.id)).slice(0, Math.min(8, perScanCap))
+      const toScore = candidates.filter(t => !existingIds.has(t.id)).slice(0, Math.min(15, perScanCap))
 
       const scoringResults = await concurrent(
         toScore,
@@ -218,7 +221,7 @@ export async function POST(req: Request) {
       if (totalCreated >= perScanCap) break
     }
 
-    if (totalCreated > 0) break
+    if (totalCreated >= MIN_LEADS) break
   }
 
   // Fire async Inngest job to backfill comments via Apify for any leads that were created without them

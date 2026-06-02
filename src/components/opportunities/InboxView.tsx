@@ -509,7 +509,7 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
                   color: S.text, cursor: 'pointer', fontFamily: 'inherit', outline: 'none',
                 }}
               >
-                <option value="all">All products ({allOpps.filter(o => o.status === activeStatus).length})</option>
+                <option value="all">All leads ({allOpps.filter(o => o.status === activeStatus).length})</option>
                 {products.map(p => (
                   <option key={p.id} value={p.id}>
                     {p.name} ({allOpps.filter(o => o.product.id === p.id && o.status === activeStatus).length})

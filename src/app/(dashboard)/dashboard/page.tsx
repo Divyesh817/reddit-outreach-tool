@@ -209,11 +209,7 @@ export default async function DashboardPage({
                   <div style={{
                     display: 'flex', alignItems: 'center', gap: 14, padding: '14px 22px',
                     borderBottom: i < recentOpps.length - 1 ? `1px solid ${S.line}` : 'none',
-                    transition: 'background .12s',
-                  }}
-                    onMouseEnter={e => (e.currentTarget.style.background = S.cardHover)}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                  >
+                  }}>
                     {/* Intent badge */}
                     <div style={{
                       width: 46, height: 46, borderRadius: 10, flexShrink: 0,
