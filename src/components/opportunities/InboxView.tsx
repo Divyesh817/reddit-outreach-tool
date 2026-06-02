@@ -358,32 +358,118 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
 
       setScanMsg(`Fetching ${subreddits.length} subreddit${subreddits.length !== 1 ? 's' : ''}…`)
 
-      // Step 2: fetch Reddit threads directly from browser (avoids Vercel IP block)
+      // Step 2: fetch threads client-side (browser IPs bypass Vercel IP block)
+      // Try 3 sources per subreddit, use first that returns data
       const limit = prep.fetchLimit ?? 15
       const subredditsData: { subredditId: string; productId: string; threads: any[] }[] = []
-      for (const { subredditId, subredditName, productId } of subreddits) {
+
+      async function tFetch(url: string, opts?: RequestInit, ms = 8000) {
+        const ctrl = new AbortController()
+        const t = setTimeout(() => ctrl.abort(), ms)
+        try { return await fetch(url, { ...opts, signal: ctrl.signal }) }
+        finally { clearTimeout(t) }
+      }
+
+      async function fetchThreadsForSub(name: string): Promise<any[]> {
+        // Source 1: Reddit JSON API
         try {
-          const res = await fetch(
-            `https://www.reddit.com/r/${encodeURIComponent(subredditName)}/new.json?limit=${limit}`,
-            { headers: { 'Accept': 'application/json' } }
-          )
-          const data = res.ok ? await res.json().catch(() => null) : null
-          const posts: any[] = data?.data?.children?.map((c: any) => c.data) ?? []
-          const threads = posts.map((p: any) => ({
-            id: p.id,
-            title: p.title,
-            selftext: p.selftext ?? '',
-            author: p.author ?? '[deleted]',
-            score: p.score ?? 1,
-            num_comments: p.num_comments ?? 0,
-            created_utc: p.created_utc,
-            permalink: p.permalink,
-            comments: [],
-          }))
-          subredditsData.push({ subredditId, productId, threads })
-        } catch {
-          subredditsData.push({ subredditId, productId, threads: [] })
-        }
+          const res = await tFetch(`https://www.reddit.com/r/${encodeURIComponent(name)}/new.json?limit=${limit}&raw_json=1`)
+          if (res.ok) {
+            const d = await res.json()
+            const posts: any[] = d?.data?.children?.map((c: any) => c.data) ?? []
+            if (posts.length) return posts.map((p: any) => ({
+              id: p.id, title: p.title, selftext: p.selftext ?? '',
+              author: p.author ?? '[deleted]', score: p.score ?? 1,
+              num_comments: p.num_comments ?? 0, created_utc: p.created_utc,
+              permalink: p.permalink, comments: [],
+            }))
+          }
+        } catch { /* try next */ }
+
+        // Source 2: Pullpush
+        try {
+          const res = await tFetch(`https://api.pullpush.io/reddit/search/submission/?subreddit=${encodeURIComponent(name)}&sort=desc&size=${limit}`)
+          if (res.ok) {
+            const d = await res.json()
+            const posts: any[] = d?.data ?? []
+            if (posts.length) return posts.filter((p: any) => p.title && p.id).map((p: any) => ({
+              id: String(p.id), title: p.title, selftext: p.selftext ?? '',
+              author: p.author ?? '[deleted]', score: p.score ?? 1,
+              num_comments: p.num_comments ?? 0,
+              created_utc: p.created_utc ?? Math.floor(Date.now() / 1000),
+              permalink: p.permalink ?? `/r/${name}/comments/${p.id}/`, comments: [],
+            }))
+          }
+        } catch { /* try next */ }
+
+        // Source 3: Reddit RSS (XML parse in browser)
+        try {
+          const res = await tFetch(`https://www.reddit.com/r/${encodeURIComponent(name)}/new.rss?limit=${limit}`)
+          if (res.ok) {
+            const xml = await res.text()
+            const threads: any[] = []
+            const re = /<entry>([\s\S]*?)<\/entry>/g
+            let m: RegExpExecArray | null
+            while ((m = re.exec(xml)) !== null) {
+              const e = m[1]
+              const rawId = e.match(/<id>([^<]+)<\/id>/)?.[1] ?? ''
+              const id = rawId.replace(/^.*t3_/, '')
+              if (!id) continue
+              const title = (e.match(/<title[^>]*>([\s\S]*?)<\/title>/)?.[1] ?? '').trim()
+                .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+              if (!title) continue
+              const href = e.match(/href="(https:\/\/www\.reddit\.com\/r\/[^"]+\/comments\/[^"]+)"/)?.[1] ?? ''
+              const author = e.match(/<name>\/u\/([^<\n]+)<\/name>/)?.[1]?.trim() ?? '[deleted]'
+              const updated = e.match(/<updated>([^<]+)<\/updated>/)?.[1] ?? ''
+              threads.push({
+                id, title, selftext: '', author, score: 1, num_comments: 0,
+                created_utc: updated ? Math.floor(new Date(updated).getTime() / 1000) : Math.floor(Date.now() / 1000),
+                permalink: href ? href.replace('https://www.reddit.com', '') : `/r/${name}/comments/${id}/`,
+                comments: [],
+              })
+            }
+            if (threads.length) return threads
+          }
+        } catch { /* all sources failed */ }
+
+        return []
+      }
+
+      // Enrich threads with top comments (concurrent browser fetches)
+      async function enrichWithComments(threads: any[]): Promise<any[]> {
+        const results = await Promise.allSettled(threads.map(async (t) => {
+          if (t.comments?.length > 0) return t
+          // Try Reddit JSON comments endpoint
+          try {
+            const res = await tFetch(`https://www.reddit.com/comments/${t.id}.json?limit=3&depth=1&raw_json=1`, undefined, 6000)
+            if (res.ok) {
+              const d = await res.json()
+              const comments = (d?.[1]?.data?.children ?? [])
+                .filter((c: any) => c.kind === 't1' && c.data?.body)
+                .slice(0, 3).map((c: any) => String(c.data.body))
+              if (comments.length > 0) return { ...t, comments }
+            }
+          } catch { /* try next */ }
+          // Try Pullpush comments endpoint
+          try {
+            const res = await tFetch(`https://api.pullpush.io/reddit/search/comment/?link_id=t3_${t.id}&sort=desc&size=5`, undefined, 6000)
+            if (res.ok) {
+              const d = await res.json()
+              const comments = (d?.data ?? [])
+                .filter((c: any) => c.body && c.body !== '[deleted]' && c.body !== '[removed]')
+                .slice(0, 3).map((c: any) => String(c.body))
+              if (comments.length > 0) return { ...t, comments }
+            }
+          } catch { /* skip */ }
+          return t
+        }))
+        return results.map((r, i) => r.status === 'fulfilled' ? r.value : threads[i])
+      }
+
+      for (const { subredditId, subredditName, productId } of subreddits) {
+        const threads = await fetchThreadsForSub(subredditName)
+        const enriched = await enrichWithComments(threads)
+        subredditsData.push({ subredditId, productId, threads: enriched })
       }
 
       const totalFetched = subredditsData.reduce((s, d) => s + d.threads.length, 0)
