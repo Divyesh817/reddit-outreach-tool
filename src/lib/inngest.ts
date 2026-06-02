@@ -2,142 +2,218 @@
 import { Inngest } from 'inngest'
 import { Resend } from 'resend'
 import { prisma } from '@/lib/prisma'
-import { fetchThreadsViaApify, fetchNewThreads, checkDailyPostingLimit, checkSubredditCooldown,
+import { fetchNewThreads, checkDailyPostingLimit, checkSubredditCooldown,
          checkCommentVisible, postReply } from '@/lib/reddit'
 import { scoreOpportunity, generateReply, generateWarmupComment, runGeoAnalysis } from '@/lib/anthropic'
 import { sendWelcomeEmail, sendHighIntentAlert, sendDailyDigest, sendWeeklySummary } from '@/lib/emails'
-import { SAFETY } from '@/types'
+import type { ProductProfile } from '@/types'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
 export const inngest = new Inngest({ id: 'reddit-outreach-tool' })
 
-// ─── Shared: scan one subreddit for one product ───────────────────────────────
+const RSS_UA = 'Feedly/1.0 (+https://feedly.com/fetcher.html; like FeedFetcher-Google)'
+
+const HIGH_INTENT_PATTERNS = [
+  'looking for', 'recommend', 'alternative to', 'switch', 'switching from',
+  'frustrated', 'sick of', 'tired of', 'help me find', 'need a tool',
+  'suggestions', 'comparison', 'similar to', 'instead of', 'leaving',
+  'anyone using', 'does anyone', 'best tool', 'best app', 'best way',
+  'anyone tried', 'what do you use', 'which tool', 'how do you',
+  'replace', 'better than', 'vs ', ' vs', 'advice', 'worth it',
+  'workflow', 'automate', 'struggling', 'issue with', 'problem with',
+  "can't stand", 'hate', 'disappointed', 'not working', 'alternatives',
+]
+
+function decodeXml(s: string) {
+  return s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)))
+}
+
+async function fetchRss(subreddit: string, sort: string, limit: number) {
+  const url = `https://www.reddit.com/r/${encodeURIComponent(subreddit)}/${sort}.rss?limit=${limit}`
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': RSS_UA, 'Accept': 'application/atom+xml, application/xml' },
+      next: { revalidate: 0 },
+    })
+    if (!res.ok) return []
+    const xml = await res.text()
+    const threads: any[] = []
+    const re = /<entry>([\s\S]*?)<\/entry>/g
+    let m: RegExpExecArray | null
+    while ((m = re.exec(xml)) !== null) {
+      const e = m[1]
+      const rawId = e.match(/<id>([^<]+)<\/id>/)?.[1] ?? ''
+      const id = rawId.replace(/^.*t3_/, '')
+      if (!id) continue
+      const title = decodeXml(e.match(/<title[^>]*>([\s\S]*?)<\/title>/)?.[1]?.trim() ?? '')
+      if (!title) continue
+      const href = e.match(/href="(https:\/\/www\.reddit\.com\/r\/[^"]+\/comments\/[^"]+)"/)?.[1] ?? ''
+      const author = e.match(/<name>\/u\/([^<\n]+)<\/name>/)?.[1]?.trim() ?? '[deleted]'
+      const updated = e.match(/<updated>([^<]+)<\/updated>/)?.[1] ?? ''
+      const content = e.match(/<content[^>]*>([\s\S]*?)<\/content>/)?.[1] ?? ''
+      const selftext = decodeXml(content).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+        .replace(/\s*submitted by\s.*$/i, '').trim()
+      threads.push({
+        id, title, selftext, author, score: 1, num_comments: 0,
+        created_utc: updated ? Math.floor(new Date(updated).getTime() / 1000) : Math.floor(Date.now() / 1000),
+        permalink: href ? href.replace('https://www.reddit.com', '') : `/r/${subreddit}/comments/${id}/`,
+        comments: [],
+      })
+    }
+    return threads
+  } catch { return [] }
+}
+
+async function fetchCommentsRss(threadId: string): Promise<string[]> {
+  try {
+    const res = await fetch(`https://www.reddit.com/comments/${threadId}.rss?limit=8`, {
+      headers: { 'User-Agent': RSS_UA }, next: { revalidate: 0 },
+    })
+    if (!res.ok) return []
+    const xml = await res.text()
+    const entries: string[] = []
+    const re = /<entry>([\s\S]*?)<\/entry>/g
+    let em: RegExpExecArray | null
+    let skip = true
+    while ((em = re.exec(xml)) !== null) {
+      if (skip) { skip = false; continue }
+      const content = em[1].match(/<content[^>]*>([\s\S]*?)<\/content>/)?.[1] ?? ''
+      const text = decodeXml(content).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300)
+      if (text.length > 10) entries.push(text)
+      if (entries.length >= 5) break
+    }
+    return entries
+  } catch { return [] }
+}
+
+// ─── Shared: scan one subreddit for one product (RSS-based, 3-attempt) ────────
 
 async function scanSubredditForProduct(
   product: {
-    id: string; url: string; name: string; description: string
+    id: string; userId: string; url: string; name: string; description: string
     targetAudience: string; keyBenefits: string[]; competitors: string[]; summary: string
   },
   subreddit: { id: string; name: string }
 ) {
-  let threads
-  try {
-    threads = await fetchThreadsViaApify(subreddit.name, 25)
-  } catch (err: any) {
-    console.error(`Scan skipped r/${subreddit.name}: ${err.message}`)
-    return 0
-  }
+  const name = subreddit.name.replace(/^\/?r\//i, '')
+  const [newThreads, hotThreads] = await Promise.all([
+    fetchRss(name, 'new', 25),
+    fetchRss(name, 'hot', 25),
+  ])
+  const seen = new Set<string>()
+  const allThreads = [...newThreads, ...hotThreads].filter(t => {
+    if (!t?.id || seen.has(t.id)) return false
+    seen.add(t.id)
+    return true
+  })
 
-  const cutoffTime = new Date()
-  cutoffTime.setHours(cutoffTime.getHours() - SAFETY.MAX_THREAD_AGE_HOURS)
+  if (!allThreads.length) return 0
 
-  const profile = {
+  const profile: ProductProfile = {
     url: product.url, name: product.name, description: product.description,
     targetAudience: product.targetAudience, keyBenefits: product.keyBenefits,
     competitors: product.competitors, summary: product.summary,
   }
 
+  const lookbackWindows = [48, 72, 96]
+  const intentThresholds = [25, 15, 10]
+  const LEADS_PER_SCAN = 8
   let created = 0
 
-  for (const thread of threads) {
-    const threadDate = new Date(thread.created_utc * 1000)
-    if (threadDate < cutoffTime) continue
+  for (let attempt = 0; attempt < lookbackWindows.length; attempt++) {
+    const cutoff = new Date(Date.now() - lookbackWindows[attempt] * 60 * 60 * 1000)
+    const minScore = intentThresholds[attempt]
+    const isLast = attempt === lookbackWindows.length - 1
 
-    // Quality filter — skip deleted, removed, or heavily-downvoted content
-    if (thread.author === '[deleted]' || thread.author === 'AutoModerator') continue
-    if (thread.title === '[deleted]' || thread.title === '[removed]') continue
-    if (thread.selftext === '[deleted]' || thread.selftext === '[removed]') continue
-    if (thread.score < -3) continue
-
-    // Skip if already seen — but backfill comments if they were empty (e.g. found via RSS scan first)
-    const existing = await prisma.opportunity.findUnique({
-      where: { redditPostId: thread.id },
-      select: { id: true, topComments: true },
-    })
-    if (existing) {
-      if (existing.topComments.length === 0 && thread.comments.length > 0) {
-        await prisma.opportunity.update({
-          where: { id: existing.id },
-          data: { topComments: thread.comments },
-        })
-      }
-      continue
-    }
-
-    let scoring
-    try {
-      scoring = await scoreOpportunity(
-        { title: thread.title, body: thread.selftext, topComments: thread.comments },
-        profile
-      )
-    } catch { continue }
-
-    if (scoring.intentScore < 65) continue
-
-    const opportunity = await prisma.opportunity.create({
-      data: {
-        productId: product.id,
-        subredditId: subreddit.id,
-        redditPostId: thread.id,
-        redditPostUrl: thread.url,
-        redditPostTitle: thread.title,
-        redditPostBody: thread.selftext || null,
-        topComments: thread.comments ?? [],
-        redditAuthor: thread.author,
-        redditScore: thread.score,
-        redditCommentCount: thread.num_comments,
-        redditPostedAt: threadDate,
-        intentScore: scoring.intentScore,
-        painType: scoring.painType,
-        shouldPitch: scoring.shouldPitch,
-        scoringReasoning: scoring.reasoning,
-        status: 'QUEUED',
-      }
+    const fresh = allThreads.filter(t => {
+      if (new Date(t.created_utc * 1000) < cutoff) return false
+      if (t.author === '[deleted]' || t.author === 'AutoModerator') return false
+      if (t.title === '[deleted]' || t.title === '[removed]') return false
+      if (t.score < -3) return false
+      return true
     })
 
-    // Pre-generate reply so user sees it immediately in inbox
-    try {
-      const replyResult = await generateReply(
-        { title: thread.title, body: thread.selftext, subreddit: subreddit.name },
-        profile,
-        scoring.painType,
-        scoring.shouldPitch
-      )
-      await prisma.reply.create({
-        data: {
-          opportunityId: opportunity.id,
-          text: replyResult.text,
-          toneUsed: replyResult.toneUsed,
-          whyThisWorks: replyResult.whyThisWorks,
-          version: 1,
-          isActive: true,
-        }
-      })
-    } catch { /* non-fatal — user can regenerate */ }
+    const candidates = isLast ? fresh : fresh.filter(t => {
+      const text = `${t.title} ${t.selftext}`.toLowerCase()
+      if (profile.competitors.some((c: string) => c && text.includes(c.toLowerCase()))) return true
+      return HIGH_INTENT_PATTERNS.some(p => text.includes(p))
+    })
 
-    // High-intent alert email if score >= 80 and user has pref enabled
-    if (scoring.intentScore >= 80) {
+    const existingIds = new Set(
+      (await prisma.opportunity.findMany({
+        where: { redditPostId: { in: candidates.map(t => t.id) }, product: { userId: product.userId } },
+        select: { redditPostId: true },
+      })).map(o => o.redditPostId)
+    )
+
+    const toScore = candidates.filter(t => !existingIds.has(t.id)).slice(0, 15)
+
+    for (const thread of toScore) {
+      let scoring
       try {
-        const owner = await prisma.user.findUnique({
-          where: { id: (product as any).userId },
-          select: { email: true, notificationPrefs: true },
-        })
-        const prefs = (owner?.notificationPrefs as any) ?? {}
-        if (owner?.email && prefs.highIntent !== false) {
-          await sendHighIntentAlert(owner.email, {
-            productName: product.name,
-            postTitle: thread.title,
-            subreddit: subreddit.name,
+        scoring = await scoreOpportunity(
+          { title: thread.title, body: thread.selftext, topComments: [] },
+          profile
+        )
+      } catch { continue }
+
+      if (scoring.intentScore < minScore) continue
+
+      const topComments = await fetchCommentsRss(thread.id)
+
+      try {
+        const opportunity = await prisma.opportunity.create({
+          data: {
+            productId: product.id,
+            subredditId: subreddit.id,
+            redditPostId: thread.id,
+            redditPostUrl: `https://reddit.com${thread.permalink}`,
+            redditPostTitle: thread.title,
+            redditPostBody: thread.selftext || null,
+            topComments,
+            redditAuthor: thread.author,
+            redditScore: thread.score,
+            redditCommentCount: thread.num_comments,
+            redditPostedAt: new Date(thread.created_utc * 1000),
             intentScore: scoring.intentScore,
-            postUrl: thread.url,
-            opportunityId: opportunity.id,
-          })
+            painType: scoring.painType,
+            shouldPitch: scoring.shouldPitch,
+            scoringReasoning: scoring.reasoning,
+            status: 'QUEUED',
+          }
+        })
+
+        // Alert for high-intent leads (score >= 80)
+        if (scoring.intentScore >= 80) {
+          try {
+            const owner = await prisma.user.findUnique({
+              where: { id: product.userId },
+              select: { email: true, notificationPrefs: true },
+            })
+            const prefs = (owner?.notificationPrefs as any) ?? {}
+            if (owner?.email && prefs.highIntent !== false) {
+              await sendHighIntentAlert(owner.email, {
+                productName: product.name,
+                postTitle: thread.title,
+                subreddit: name,
+                intentScore: scoring.intentScore,
+                postUrl: `https://reddit.com${thread.permalink}`,
+                opportunityId: opportunity.id,
+              })
+            }
+          } catch { /* non-fatal */ }
         }
-      } catch { /* non-fatal */ }
+
+        created++
+      } catch { continue }
+
+      if (created >= LEADS_PER_SCAN) break
     }
 
-    created++
+    if (created > 0) break
   }
 
   await prisma.subreddit.update({
@@ -153,14 +229,16 @@ async function scanSubredditForProduct(
 
 export const scanSubreddits = inngest.createFunction(
   { id: 'scan-subreddits', concurrency: { limit: 5 } },
-  { cron: '0 */6 * * *' },
+  { cron: '0 */3 * * *' },
   async ({ step }) => {
     const activeProducts = await step.run('fetch-products', async () => {
       return prisma.product.findMany({
         where: { isActive: true },
-        include: {
-          subreddits: { where: { isActive: true, isBlacklisted: false } },
-        }
+        select: {
+          id: true, userId: true, url: true, name: true, description: true,
+          targetAudience: true, keyBenefits: true, competitors: true, summary: true,
+          subreddits: { where: { isActive: true, isBlacklisted: false }, select: { id: true, name: true } },
+        },
       })
     })
 
@@ -345,7 +423,11 @@ export const manualScan = inngest.createFunction(
     const products = await step.run('fetch-products', async () => {
       return prisma.product.findMany({
         where: { userId, isActive: true },
-        include: { subreddits: { where: { isActive: true, isBlacklisted: false } } },
+        select: {
+          id: true, userId: true, url: true, name: true, description: true,
+          targetAudience: true, keyBenefits: true, competitors: true, summary: true,
+          subreddits: { where: { isActive: true, isBlacklisted: false }, select: { id: true, name: true } },
+        },
       })
     })
 

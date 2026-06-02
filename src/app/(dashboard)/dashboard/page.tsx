@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { S } from '@/lib/theme'
+import { ProductLogo } from '@/components/ui/ProductLogo'
 
 const PAIN_LABELS: Record<string, { label: string; color: string; bg: string }> = {
   workflow_pain:          { label: 'Workflow pain',      color: S.purple,  bg: S.purpleSoft },
@@ -284,14 +285,7 @@ export default async function DashboardPage({
                     display: 'flex', alignItems: 'center', gap: 12, padding: '12px 18px',
                     borderBottom: i < products.length - 1 ? `1px solid ${S.line}` : 'none',
                   }}>
-                    <div style={{
-                      width: 34, height: 34, borderRadius: 9, flexShrink: 0,
-                      background: S.orangeSoft, border: `1px solid ${S.orangeLine}`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 13, fontWeight: 700, color: S.orange2,
-                    }}>
-                      {p.name[0].toUpperCase()}
-                    </div>
+                    <ProductLogo name={p.name} logoUrl={(p as any).logoUrl} size={34} radius={9} />
                     <span style={{ fontSize: 14, fontWeight: 600, color: S.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {p.name}
                     </span>

@@ -142,7 +142,7 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
   const [scanProductId, setScanProductId] = useState<string>('all')
   const [scanning, setScanning] = useState(false)
   const [scanMsg, setScanMsg] = useState('')
-  const [leadsToast, setLeadsToast] = useState<{ count: number } | null>(null)
+  const [leadsToast, setLeadsToast] = useState<{ count: number; away?: boolean } | null>(null)
   const [comments, setComments] = useState<{ author: string; body: string; score: number }[]>([])
   const [commentsLoading, setCommentsLoading] = useState(false)
   const [commentsError, setCommentsError] = useState('')
@@ -220,6 +220,21 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
   // Load stored comments for the initially selected thread on mount
   useEffect(() => {
     if (selected) loadStoredComments(selected)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Show "leads found while you were away" toast on login
+  useEffect(() => {
+    const LS_KEY = 'rg_last_visit'
+    const lastVisit = localStorage.getItem(LS_KEY)
+    const queuedCount = initial.filter(o => o.status === 'QUEUED').length
+    if (lastVisit && queuedCount > 0) {
+      const newLeads = initial.filter(o =>
+        o.status === 'QUEUED' && new Date(o.redditPostedAt) > new Date(lastVisit)
+      ).length
+      if (newLeads > 0) setLeadsToast({ count: newLeads, away: true })
+    }
+    localStorage.setItem(LS_KEY, new Date().toISOString())
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -357,152 +372,46 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
         return
       }
 
-      setScanMsg(`Scanning Reddit — this might take a moment, we'll notify you when leads are ready.`)
+      setScanMsg(`Fetching ${subreddits.length} subreddit${subreddits.length !== 1 ? 's' : ''}…`)
 
-      // Step 2: fetch threads client-side (browser IPs bypass Vercel IP block)
-      // Try 3 sources per subreddit, use first that returns data
+      // Step 2: fetch all subreddits in parallel (RSS server-side)
       const limit = prep.fetchLimit ?? 15
-      const subredditsData: { subredditId: string; productId: string; threads: any[] }[] = []
-
-      async function tFetch(url: string, opts?: RequestInit, ms = 8000) {
-        const ctrl = new AbortController()
-        const t = setTimeout(() => ctrl.abort(), ms)
-        try { return await fetch(url, { ...opts, signal: ctrl.signal }) }
-        finally { clearTimeout(t) }
-      }
-
-      function mapRedditPost(p: any, name: string) {
-        return {
-          id: p.id, title: p.title, selftext: p.selftext ?? '',
-          author: p.author ?? '[deleted]', score: p.score ?? 1,
-          num_comments: p.num_comments ?? 0, created_utc: p.created_utc,
-          permalink: p.permalink ?? `/r/${name}/comments/${p.id}/`, comments: [],
-        }
-      }
-
-      // Fetch new + top/week from Reddit, fall back to Pullpush then RSS
-      async function fetchThreadsForSub(rawName: string): Promise<any[]> {
-        // Strip leading r/ or /r/ so URL is always reddit.com/r/SaaS not reddit.com/r/r/SaaS
-        const name = rawName.replace(/^\/?r\//i, '')
-        const seen = new Set<string>()
-        const merged: any[] = []
-
-        // Try Reddit JSON for /new and /top?t=week simultaneously
-        const redditResults = await Promise.allSettled([
-          tFetch(`https://www.reddit.com/r/${encodeURIComponent(name)}/new.json?limit=${limit}&raw_json=1`),
-          tFetch(`https://www.reddit.com/r/${encodeURIComponent(name)}/top.json?t=week&limit=${limit}&raw_json=1`),
-        ])
-        for (const r of redditResults) {
-          if (r.status !== 'fulfilled' || !r.value.ok) continue
-          try {
-            const d = await r.value.json()
-            const posts: any[] = d?.data?.children?.map((c: any) => c.data) ?? []
-            for (const p of posts) {
-              if (!seen.has(p.id)) { seen.add(p.id); merged.push(mapRedditPost(p, name)) }
-            }
-          } catch { /* skip */ }
-        }
-        if (merged.length) return merged
-
-        // Fallback: Pullpush
-        try {
-          const res = await tFetch(`https://api.pullpush.io/reddit/search/submission/?subreddit=${encodeURIComponent(name)}&sort=desc&size=${limit}`)
-          if (res.ok) {
-            const d = await res.json()
-            const posts: any[] = (d?.data ?? []).filter((p: any) => p.title && p.id)
-            if (posts.length) return posts.map((p: any) => ({
-              id: String(p.id), title: p.title, selftext: p.selftext ?? '',
-              author: p.author ?? '[deleted]', score: p.score ?? 1,
-              num_comments: p.num_comments ?? 0,
-              created_utc: p.created_utc ?? Math.floor(Date.now() / 1000),
-              permalink: p.permalink ?? `/r/${name}/comments/${p.id}/`, comments: [],
-            }))
-          }
-        } catch { /* try next */ }
-
-        // Fallback: server-side RSS via API route (avoids browser CORS restrictions on Reddit RSS)
-        try {
-          const res = await tFetch(`/api/reddit/threads?subreddit=${encodeURIComponent(name)}&limit=${limit}`)
-          if (res.ok) {
-            const d = await res.json()
-            if (d.threads?.length) return d.threads
-          }
-        } catch { /* all sources failed */ }
-
-        return []
-      }
-
-      // Enrich threads with top comments
-      async function enrichWithComments(threads: any[]): Promise<any[]> {
-        const results = await Promise.allSettled(threads.map(async (t) => {
-          if (t.comments?.length > 0) return t
-          try {
-            const res = await tFetch(`https://www.reddit.com/comments/${t.id}.json?limit=3&depth=1&raw_json=1`, undefined, 6000)
-            if (res.ok) {
-              const d = await res.json()
-              const comments = (d?.[1]?.data?.children ?? [])
-                .filter((c: any) => c.kind === 't1' && c.data?.body)
-                .slice(0, 3).map((c: any) => String(c.data.body))
-              if (comments.length > 0) return { ...t, comments }
-            }
-          } catch { /* try next */ }
-          try {
-            const res = await tFetch(`https://api.pullpush.io/reddit/search/comment/?link_id=t3_${t.id}&sort=desc&size=5`, undefined, 6000)
-            if (res.ok) {
-              const d = await res.json()
-              const comments = (d?.data ?? [])
-                .filter((c: any) => c.body && c.body !== '[deleted]' && c.body !== '[removed]')
-                .slice(0, 3).map((c: any) => String(c.body))
-              if (comments.length > 0) return { ...t, comments }
-            }
-          } catch { /* skip */ }
-          return t
-        }))
-        return results.map((r, i) => r.status === 'fulfilled' ? r.value : threads[i])
-      }
-
-      // Score each batch as soon as it's ready — don't wait for all subreddits
-      let totalCreated = 0
-      async function fetchAndScore(batch: typeof subreddits) {
-        const batchData = (await Promise.allSettled(
-          batch.map(async ({ subredditId, subredditName, productId }) => {
-            const threads = await fetchThreadsForSub(subredditName)
-            const enriched = await enrichWithComments(threads)
-            return { subredditId, productId, threads: enriched }
-          })
-        )).filter(r => r.status === 'fulfilled').map(r => (r as any).value)
-
-        if (!batchData.length) return
-        const totalFetched = batchData.reduce((s: number, d: any) => s + d.threads.length, 0)
-        if (!totalFetched) return
-
-        const processRes = await fetch('/api/scan/process', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ subredditsData: batchData }),
+      const fetchResults = await Promise.allSettled(
+        subreddits.map(async ({ subredditId, subredditName, productId }) => {
+          const res = await fetch(`/api/reddit/threads?subreddit=${encodeURIComponent(subredditName)}&limit=${limit}`)
+          const data = await res.json().catch(() => ({ threads: [] }))
+          return { subredditId, productId, threads: data.threads ?? [] }
         })
-        const result = await processRes.json().catch(() => ({}))
-        if (!result.error) {
-          totalCreated += result.totalCreated ?? 0
-          if (totalCreated > 0) setScanMsg(`${totalCreated} lead${totalCreated !== 1 ? 's' : ''} found so far…`)
-        }
-        router.refresh()
+      )
+      const subredditsData = fetchResults
+        .filter(r => r.status === 'fulfilled')
+        .map(r => (r as PromiseFulfilledResult<any>).value)
+
+      const totalFetched = subredditsData.reduce((s, d) => s + d.threads.length, 0)
+      if (!totalFetched) {
+        setScanMsg('Could not reach Reddit — check your connection')
+        setTimeout(() => setScanMsg(''), 6000)
+        setScanning(false)
+        return
       }
 
-      const BATCH = 5
-      const batches: (typeof subreddits)[] = []
-      for (let i = 0; i < subreddits.length; i += BATCH) batches.push(subreddits.slice(i, i + BATCH))
-      for (const batch of batches) await fetchAndScore(batch)
+      setScanMsg('Scoring threads…')
 
-      // Silently backfill past 21 days in background — no await, no UI feedback
-      fetch('/api/scan/backfill', { method: 'POST' }).then(r => r.ok && router.refresh()).catch(() => {})
+      // Step 3: send to server for AI scoring + saving
+      const processRes = await fetch('/api/scan/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subredditsData }),
+      })
+      const result = await processRes.json().catch(() => ({}))
+      const totalCreated = result.totalCreated ?? 0
 
-      setScanMsg('')
-      if (totalCreated > 0) {
-        setLeadsToast({ count: totalCreated })
-      } else {
-        setScanMsg(`No high-intent leads found. Add more subreddits to see more threads — we keep the quality high and skip low-intent posts.`)
-        setTimeout(() => setScanMsg(''), 7000)
+      const n = totalCreated
+      setScanMsg(n > 0 ? `${n} new lead${n !== 1 ? 's' : ''} found!` : `Scanned ${subreddits.length} subreddit${subreddits.length !== 1 ? 's' : ''} — no new high-intent threads`)
+      setTimeout(() => setScanMsg(''), 7000)
+      if (n > 0) {
+        setLeadsToast({ count: n })
+        setTimeout(() => router.refresh(), 3 * 60 * 1000)
       }
 
       router.refresh()
@@ -541,10 +450,12 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: S.text }}>
-              {leadsToast.count} new lead{leadsToast.count !== 1 ? 's' : ''} ready
+              {leadsToast.away
+                ? `We found ${leadsToast.count} lead${leadsToast.count !== 1 ? 's' : ''} while you were away`
+                : `${leadsToast.count} new lead${leadsToast.count !== 1 ? 's' : ''} ready`}
             </p>
             <p style={{ margin: '2px 0 0', fontSize: 12, color: S.text3 }}>
-              Your Reddit scan is complete
+              {leadsToast.away ? 'Your inbox has been updated' : 'Your Reddit scan is complete'}
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>

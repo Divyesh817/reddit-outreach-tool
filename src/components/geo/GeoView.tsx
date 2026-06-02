@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { S } from '@/lib/theme'
+import { ProductLogo } from '@/components/ui/ProductLogo'
 
 const GEO_CSS = `
   @keyframes geo-spin { from { transform:rotate(0deg) } to { transform:rotate(360deg) } }
@@ -288,14 +289,7 @@ export function GeoView({ products, plan, limit }: Props) {
                     padding: '16px 20px', background: S.panel, border: 'none',
                     cursor: 'pointer', textAlign: 'left', transition: 'background .15s',
                   }}>
-                    <span style={{
-                      width: 38, height: 38, borderRadius: 9, flexShrink: 0,
-                      background: 'linear-gradient(135deg, #FFA070, #E54B1B)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 17, fontWeight: 700, color: '#fff',
-                    }}>
-                      {product.name[0]?.toUpperCase() ?? '?'}
-                    </span>
+                    <ProductLogo name={product.name} logoUrl={(product as any).logoUrl} size={38} radius={9} />
                     <span style={{ flex: 1, fontSize: 17, fontWeight: 600, color: S.text, letterSpacing: '-.01em' }}>
                       {product.name}
                     </span>

@@ -59,6 +59,13 @@ export async function POST(req: NextRequest) {
   // Discover subreddits
   const suggestedSubreddits = await discoverSubreddits(profile)
 
+  // Fetch favicon via Google's favicon service
+  let logoUrl: string | null = null
+  try {
+    const domain = new URL(url).hostname
+    logoUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`
+  } catch { /* non-fatal */ }
+
   // Create product
   const product = await prisma.product.create({
     data: {
@@ -70,6 +77,7 @@ export async function POST(req: NextRequest) {
       keyBenefits: profile.keyBenefits,
       competitors: profile.competitors,
       summary: profile.summary,
+      logoUrl,
       lastScrapedAt: new Date(),
     },
   })

@@ -69,6 +69,7 @@ model Product {
   summary     String   @db.Text // AI-generated summary used for all prompts
 
   // Status
+  logoUrl     String?
   isActive    Boolean  @default(true)
   lastScrapedAt DateTime?
 

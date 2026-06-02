@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { S, DARK_VARS, LIGHT_VARS } from '@/lib/theme'
 import { PLAN_LIMITS } from '@/types'
 import { SupportWidget } from '@/components/support/SupportWidget'
+import { ProductLogo } from '@/components/ui/ProductLogo'
 
 interface Props {
   user: { name: string; email: string; avatarUrl: string | null; plan: string }
@@ -130,14 +131,7 @@ export function DashboardShell({ user, products, children, opportunityCount = 0,
             }}
           >
             {product ? (
-              <span style={{
-                width: 26, height: 26, borderRadius: 7, flexShrink: 0,
-                background: 'linear-gradient(135deg,#FFA070,#E54B1B)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 14, fontWeight: 700, color: '#fff',
-              }}>
-                {product.name[0].toUpperCase()}
-              </span>
+              <ProductLogo name={product.name} logoUrl={(product as any).logoUrl} size={26} radius={7} />
             ) : (
               <span style={{ width: 26, height: 26, borderRadius: 7, flexShrink: 0, background: S.line, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <svg width="12" height="12" fill="none" stroke={S.text4} strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
@@ -168,14 +162,7 @@ export function DashboardShell({ user, products, children, opportunityCount = 0,
                     transition: 'all .12s',
                   }}
                 >
-                  <span style={{
-                    width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-                    background: 'linear-gradient(135deg,#FFA070,#E54B1B)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 11, fontWeight: 700, color: '#fff',
-                  }}>
-                    {p.name[0].toUpperCase()}
-                  </span>
+                  <ProductLogo name={p.name} logoUrl={(p as any).logoUrl} size={22} radius={6} />
                   <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: S.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {p.name}
                   </span>

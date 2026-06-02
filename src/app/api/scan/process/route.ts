@@ -3,7 +3,6 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { prisma } from '@/lib/prisma'
-import { inngest } from '@/lib/inngest'
 import { scoreOpportunity } from '@/lib/anthropic'
 import { PLAN_LIMITS } from '@/types'
 import type { ProductProfile, Plan } from '@/types'
@@ -55,32 +54,6 @@ async function concurrent<T>(
   return results
 }
 
-async function fetchCommentsRss(threadId: string): Promise<string[]> {
-  try {
-    const res = await fetch(
-      `https://www.reddit.com/comments/${threadId}.rss?limit=8`,
-      { headers: { 'User-Agent': 'Feedly/1.0 (+https://feedly.com/fetcher.html)' }, next: { revalidate: 0 } }
-    )
-    if (!res.ok) return []
-    const xml = await res.text()
-    const entries: string[] = []
-    const re = /<entry>([\s\S]*?)<\/entry>/g
-    let em: RegExpExecArray | null
-    let skip = true // first entry is the post itself
-    while ((em = re.exec(xml)) !== null) {
-      if (skip) { skip = false; continue }
-      const content = em[1].match(/<content[^>]*>([\s\S]*?)<\/content>/)?.[1] ?? ''
-      const text = content
-        .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
-        .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300)
-      if (text.length > 10) entries.push(text)
-      if (entries.length >= 5) break
-    }
-    return entries
-  } catch {
-    return []
-  }
-}
 
 export async function POST(req: Request) {
   const supabase = createClient()
@@ -107,11 +80,11 @@ export async function POST(req: Request) {
   }
 
   const remainingOpps = limits.opportunitiesPerMonth - oppsThisMonth
-  const perScanCap = Math.min(remainingOpps, limits.threadsPerSubreddit)
+  const perScanCap = Math.min(remainingOpps, 8) // hard cap: max 8 leads per scan
 
   const base = Math.max(limits.lookbackHours, 24)
   const lookbackWindows = Array.from(new Set([base, Math.max(base, 72), Math.max(base * 2, 96)]))
-  const intentThresholds = [25, 15, 10]
+  const intentThresholds = [60, 45, 30]
 
   let totalCreated = 0
   let totalScanned = 0
@@ -162,7 +135,7 @@ export async function POST(req: Request) {
         })).map(o => o.redditPostId)
       )
 
-      const toScore = candidates.filter(t => !existingIds.has(t.id)).slice(0, Math.min(8, perScanCap))
+      const toScore = candidates.filter(t => !existingIds.has(t.id)).slice(0, 15)
 
       const scoringResults = await concurrent(
         toScore,
@@ -188,12 +161,6 @@ export async function POST(req: Request) {
         if (scoring.intentScore < minIntentScore) continue
         const threadDate = new Date(thread.created_utc * 1000)
         try {
-          // Fetch comments via RSS and store them with the opportunity
-          let topComments: string[] = thread.comments ?? []
-          if (topComments.length === 0) {
-            topComments = await fetchCommentsRss(thread.id)
-          }
-
           await prisma.opportunity.create({
             data: {
               productId,
@@ -202,7 +169,7 @@ export async function POST(req: Request) {
               redditPostUrl: `https://reddit.com${thread.permalink}`,
               redditPostTitle: thread.title,
               redditPostBody: thread.selftext || null,
-              topComments,
+              topComments: [],
               redditAuthor: thread.author,
               redditScore: thread.score,
               redditCommentCount: thread.num_comments,
@@ -224,12 +191,6 @@ export async function POST(req: Request) {
     }
 
     if (totalCreated > 0) break
-  }
-
-  if (totalCreated > 0) {
-    try {
-      await inngest.send({ name: 'scan/manual', data: { userId: user.id } })
-    } catch { /* non-fatal */ }
   }
 
   return NextResponse.json({ totalCreated, totalScanned, plan })
