@@ -110,9 +110,10 @@ export default function OnboardingPage() {
     setCheck('keywords', 'done')
     await delay(400)
 
+    const cleanSubs = fetchedSubs.map((s: any) => ({ ...s, name: s.name.replace(/^\/?r\//i, '') }))
     setProfile(fetchedProfile)
-    setDiscoveredSubs(fetchedSubs)
-    setSelectedSubs(new Set(fetchedSubs.map(s => s.name)))
+    setDiscoveredSubs(cleanSubs)
+    setSelectedSubs(new Set(cleanSubs.map((s: any) => s.name)))
     setSuggestedKeywords(fetchedKeywords)
     // Pre-populate first 6 as default selected keywords
     setKeywords(fetchedKeywords.slice(0, 6))

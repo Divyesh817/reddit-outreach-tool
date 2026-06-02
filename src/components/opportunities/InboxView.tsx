@@ -684,7 +684,7 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
                     {opp.redditPostTitle}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: S.text3 }}>
-                    <span style={{ color: S.text2, fontWeight: 500 }}>r/{opp.subreddit.name}</span>
+                    <span style={{ color: S.text2, fontWeight: 500 }}>r/{opp.subreddit.name.replace(/^\/?r\//i, '')}</span>
                     <Dot />
                     <span>u/{opp.redditAuthor}</span>
                     <Dot />
@@ -741,7 +741,7 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
                       </a>
                     </h1>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontFamily: 'JetBrains Mono, monospace', fontSize: 13, color: S.text3 }}>
-                      <span style={{ color: S.text, fontWeight: 600 }}>r/{selected.subreddit.name}</span>
+                      <span style={{ color: S.text, fontWeight: 600 }}>r/{selected.subreddit.name.replace(/^\/?r\//i, '')}</span>
                       {/* Promo welcome pill */}
                       <span style={{
                         display: 'inline-flex', alignItems: 'center', gap: 4,

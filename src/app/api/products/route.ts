@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
       return prisma.subreddit.create({
         data: {
           productId: product.id,
-          name: sub.name,
+          name: sub.name.replace(/^\/?r\//i, ''),
           fitScore: sub.fitScore,
           fitReason: sub.fitReason,
           allowsPromotion: rules.allowsPromotion,

@@ -59,8 +59,14 @@ async function fromRss(postId: string) {
   return entries.slice(1).slice(0, 10).map(e => {
     const author = e.match(/<name>\/u\/([^<\n]+)<\/name>/)?.[1]?.trim() ?? '[deleted]'
     const contentHtml = e.match(/<content[^>]*>([\s\S]*?)<\/content>/)?.[1] ?? ''
-    const body = contentHtml.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&')
-      .replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0, 500)
+    const decoded = contentHtml
+      .replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&')
+      .replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(parseInt(n,10)))
+    const stripped = decoded.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim()
+    // Second pass: handle double-encoded entities
+    const body = stripped
+      .replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'")
+      .replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(parseInt(n,10))).slice(0, 500)
     return { author, body, score: 1 }
   }).filter(c => c.body.length > 10 && c.author !== '[deleted]')
 }

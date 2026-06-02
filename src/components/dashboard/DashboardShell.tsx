@@ -11,7 +11,7 @@ import { ProductLogo } from '@/components/ui/ProductLogo'
 
 interface Props {
   user: { name: string; email: string; avatarUrl: string | null; plan: string }
-  products: { id: string; name: string; url: string }[]
+  products: { id: string; name: string; url: string; logoUrl?: string | null }[]
   children: React.ReactNode
   opportunityCount?: number
   repliesThisMonth?: number

@@ -12,7 +12,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   const [dbUser, products, opportunityCount, repliesThisMonth] = await Promise.all([
     prisma.user.findUnique({ where: { id: user.id }, select: { name: true, email: true, avatarUrl: true, plan: true } }),
-    prisma.product.findMany({ where: { userId: user.id, isActive: true }, select: { id: true, name: true, url: true }, orderBy: { createdAt: 'asc' } }),
+    prisma.product.findMany({ where: { userId: user.id, isActive: true }, select: { id: true, name: true, url: true, logoUrl: true }, orderBy: { createdAt: 'asc' } }),
     prisma.opportunity.count({ where: { product: { userId: user.id }, status: 'QUEUED' } }),
     prisma.reply.count({ where: { opportunity: { product: { userId: user.id } }, createdAt: { gte: monthStart } } }),
   ])
