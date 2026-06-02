@@ -420,33 +420,12 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
           }
         } catch { /* try next */ }
 
-        // Fallback: Reddit RSS
+        // Fallback: server-side RSS via API route (avoids browser CORS restrictions on Reddit RSS)
         try {
-          const res = await tFetch(`https://www.reddit.com/r/${encodeURIComponent(name)}/new.rss?limit=${limit}`)
+          const res = await tFetch(`/api/reddit/threads?subreddit=${encodeURIComponent(name)}&limit=${limit}`)
           if (res.ok) {
-            const xml = await res.text()
-            const threads: any[] = []
-            const re = /<entry>([\s\S]*?)<\/entry>/g
-            let m: RegExpExecArray | null
-            while ((m = re.exec(xml)) !== null) {
-              const e = m[1]
-              const rawId = e.match(/<id>([^<]+)<\/id>/)?.[1] ?? ''
-              const id = rawId.replace(/^.*t3_/, '')
-              if (!id) continue
-              const title = (e.match(/<title[^>]*>([\s\S]*?)<\/title>/)?.[1] ?? '').trim()
-                .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-              if (!title) continue
-              const href = e.match(/href="(https:\/\/www\.reddit\.com\/r\/[^"]+\/comments\/[^"]+)"/)?.[1] ?? ''
-              const author = e.match(/<name>\/u\/([^<\n]+)<\/name>/)?.[1]?.trim() ?? '[deleted]'
-              const updated = e.match(/<updated>([^<]+)<\/updated>/)?.[1] ?? ''
-              threads.push({
-                id, title, selftext: '', author, score: 1, num_comments: 0,
-                created_utc: updated ? Math.floor(new Date(updated).getTime() / 1000) : Math.floor(Date.now() / 1000),
-                permalink: href ? href.replace('https://www.reddit.com', '') : `/r/${name}/comments/${id}/`,
-                comments: [],
-              })
-            }
-            if (threads.length) return threads
+            const d = await res.json()
+            if (d.threads?.length) return d.threads
           }
         } catch { /* all sources failed */ }
 
