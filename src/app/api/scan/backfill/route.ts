@@ -82,12 +82,12 @@ export async function POST() {
       // Deduplicate against existing
       const existingIds = new Set(
         (await prisma.opportunity.findMany({
-          where: { redditPostId: { in: threads.map(t => t.id) }, product: { userId: user.id } },
+          where: { redditPostId: { in: threads.map((t: any) => t.id) }, product: { userId: user.id } },
           select: { redditPostId: true },
         })).map(o => o.redditPostId)
       )
 
-      const toScore = threads.filter(t =>
+      const toScore = threads.filter((t: any) =>
         !existingIds.has(t.id) &&
         t.author !== '[deleted]' && t.author !== 'AutoModerator' &&
         t.title !== '[deleted]' && t.title !== '[removed]'
@@ -96,7 +96,7 @@ export async function POST() {
       if (!toScore.length) continue
       totalScored += toScore.length
 
-      const results = await concurrent(toScore, async (thread) => {
+      const results = await concurrent(toScore, async (thread: any) => {
         const scoring = await scoreOpportunity(
           { title: thread.title, body: thread.selftext, topComments: [] },
           profile
