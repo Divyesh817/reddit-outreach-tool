@@ -83,12 +83,12 @@ export async function POST(req: Request) {
   const remainingOpps = limits.opportunitiesPerMonth - oppsThisMonth
   const perScanCap = Math.min(remainingOpps, limits.threadsPerSubreddit)
 
-  const MIN_LEADS = 7 // keep scanning until we have at least this many
+  const MIN_LEADS = 8
 
   const base = Math.max(limits.lookbackHours, 48)
   const lookbackWindows = Array.from(new Set([base, Math.max(base, 96), Math.max(base * 2, 168)]))
-  // 65 is the hard floor — never show anything below this
-  const intentThresholds = [65, 65, 65]
+  // Drop threshold each attempt so we always surface MIN_LEADS
+  const intentThresholds = [65, 50, 35]
 
   let totalCreated = 0
   let totalScanned = 0
