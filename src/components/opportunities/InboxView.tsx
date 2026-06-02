@@ -358,13 +358,32 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
 
       setScanMsg(`Fetching ${subreddits.length} subreddit${subreddits.length !== 1 ? 's' : ''}…`)
 
-      // Step 2: fetch Reddit threads sequentially — parallel bursts trigger Reddit rate limits
+      // Step 2: fetch Reddit threads directly from browser (avoids Vercel IP block)
       const limit = prep.fetchLimit ?? 15
       const subredditsData: { subredditId: string; productId: string; threads: any[] }[] = []
       for (const { subredditId, subredditName, productId } of subreddits) {
-        const res = await fetch(`/api/reddit/threads?subreddit=${encodeURIComponent(subredditName)}&limit=${limit}`)
-        const data = await res.json().catch(() => ({ threads: [] }))
-        subredditsData.push({ subredditId, productId, threads: data.threads ?? [] })
+        try {
+          const res = await fetch(
+            `https://www.reddit.com/r/${encodeURIComponent(subredditName)}/new.json?limit=${limit}`,
+            { headers: { 'Accept': 'application/json' } }
+          )
+          const data = res.ok ? await res.json().catch(() => null) : null
+          const posts: any[] = data?.data?.children?.map((c: any) => c.data) ?? []
+          const threads = posts.map((p: any) => ({
+            id: p.id,
+            title: p.title,
+            selftext: p.selftext ?? '',
+            author: p.author ?? '[deleted]',
+            score: p.score ?? 1,
+            num_comments: p.num_comments ?? 0,
+            created_utc: p.created_utc,
+            permalink: p.permalink,
+            comments: [],
+          }))
+          subredditsData.push({ subredditId, productId, threads })
+        } catch {
+          subredditsData.push({ subredditId, productId, threads: [] })
+        }
       }
 
       const totalFetched = subredditsData.reduce((s, d) => s + d.threads.length, 0)

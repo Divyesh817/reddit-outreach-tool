@@ -4,12 +4,18 @@ import { NextRequest, NextResponse } from 'next/server'
 
 const UA = 'Feedly/1.0 (+https://feedly.com/fetcher.html; like FeedFetcher-Google)'
 
+function timedFetch(url: string, opts: RequestInit, ms = 8000) {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), ms)
+  return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(timer))
+}
+
 // ─── Source 1: Pullpush (Reddit data mirror) ─────────────────────────────────
 
 async function fromPullpush(subreddit: string, limit: number) {
-  const res = await fetch(
+  const res = await timedFetch(
     `https://api.pullpush.io/reddit/search/submission/?subreddit=${encodeURIComponent(subreddit)}&sort=desc&size=${limit}`,
-    { headers: { 'User-Agent': UA, 'Accept': 'application/json' }, next: { revalidate: 0 } }
+    { headers: { 'User-Agent': UA, 'Accept': 'application/json' }, next: { revalidate: 0 } } as RequestInit
   )
   if (!res.ok) return []
   const data = await res.json()
@@ -31,9 +37,9 @@ async function fromPullpush(subreddit: string, limit: number) {
 // ─── Source 2: Arctic Shift (another Reddit archive) ─────────────────────────
 
 async function fromArcticShift(subreddit: string, limit: number) {
-  const res = await fetch(
+  const res = await timedFetch(
     `https://arctic-shift.photon-reddit.com/api/posts/search?subreddit=${encodeURIComponent(subreddit)}&limit=${limit}&sort=created_utc&order=desc`,
-    { headers: { 'User-Agent': UA, 'Accept': 'application/json' }, next: { revalidate: 0 } }
+    { headers: { 'User-Agent': UA, 'Accept': 'application/json' }, next: { revalidate: 0 } } as RequestInit
   )
   if (!res.ok) return []
   const data = await res.json()
@@ -55,9 +61,9 @@ async function fromArcticShift(subreddit: string, limit: number) {
 // ─── Source 3: Reddit RSS (last resort) ──────────────────────────────────────
 
 async function fromRss(subreddit: string, limit: number) {
-  const res = await fetch(
+  const res = await timedFetch(
     `https://www.reddit.com/r/${encodeURIComponent(subreddit)}/new.rss?limit=${limit}`,
-    { headers: { 'User-Agent': UA, 'Accept': 'application/atom+xml, application/xml' }, next: { revalidate: 0 } }
+    { headers: { 'User-Agent': UA, 'Accept': 'application/atom+xml, application/xml' }, next: { revalidate: 0 } } as RequestInit
   )
   if (!res.ok) return []
   const xml = await res.text()
