@@ -12,13 +12,18 @@ export async function POST(req: NextRequest) {
   const { url, html } = await req.json()
   if (!url) return NextResponse.json({ error: 'Missing url' }, { status: 400 })
 
-  // html may be empty if the site blocked scraping — the AI uses the URL + domain signals
-  const profile = await scrapeProductProfile(url, html || '')
+  try {
+    // html may be empty if the site blocked scraping — the AI uses the URL + domain signals
+    const profile = await scrapeProductProfile(url, html || '')
 
-  const [subreddits, keywords] = await Promise.all([
-    discoverSubreddits(profile).catch(() => []),
-    generateKeywordSuggestions(profile).catch(() => []),
-  ])
+    const [subreddits, keywords] = await Promise.all([
+      discoverSubreddits(profile).catch(() => []),
+      generateKeywordSuggestions(profile).catch(() => []),
+    ])
 
-  return NextResponse.json({ profile, subreddits, keywords })
+    return NextResponse.json({ profile, subreddits, keywords })
+  } catch (e: any) {
+    console.error('Onboarding analyze error:', e?.message)
+    return NextResponse.json({ error: e?.message ?? 'AI analysis failed' }, { status: 500 })
+  }
 }

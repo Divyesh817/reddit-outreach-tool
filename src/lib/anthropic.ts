@@ -4,6 +4,12 @@ import type { ProductProfile, ScoringResult, ReplyResult, PainType } from '@/typ
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
+function parseJSON(text: string) {
+  // Strip markdown code fences Claude sometimes adds despite being told not to
+  const clean = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim()
+  return JSON.parse(clean)
+}
+
 // ─── Product Scraper ──────────────────────────────────────────────────────────
 
 export async function scrapeProductProfile(url: string, html: string): Promise<ProductProfile> {
@@ -33,7 +39,7 @@ If HTML is unavailable, make your best inference from the URL and domain name. A
   })
 
   const text = response.content[0].type === 'text' ? response.content[0].text : ''
-  return JSON.parse(text) as ProductProfile
+  return parseJSON(text) as ProductProfile
 }
 
 // ─── Subreddit Discovery ──────────────────────────────────────────────────────
@@ -73,7 +79,7 @@ Return 8–12 subreddits.`
   })
 
   const text = response.content[0].type === 'text' ? response.content[0].text : '[]'
-  return JSON.parse(text)
+  return parseJSON(text)
 }
 
 // ─── Intent Scoring ───────────────────────────────────────────────────────────
@@ -125,7 +131,7 @@ shouldPitch = false if: thread is just venting with no solution-seeking, thread 
   })
 
   const text = response.content[0].type === 'text' ? response.content[0].text : ''
-  return JSON.parse(text) as ScoringResult
+  return parseJSON(text) as ScoringResult
 }
 
 // ─── Reply Generation ─────────────────────────────────────────────────────────
@@ -191,7 +197,7 @@ Return ONLY valid JSON, no markdown:
   })
 
   const text = response.content[0].type === 'text' ? response.content[0].text : ''
-  const result = JSON.parse(text) as ReplyResult
+  const result = parseJSON(text) as ReplyResult
   result.text = await humaniseReply(result.text, thread.subreddit)
   return result
 }
@@ -309,7 +315,7 @@ Rules:
     }]
   })
   const text = response.content[0].type === 'text' ? response.content[0].text : '[]'
-  try { return JSON.parse(text) } catch { return [] }
+  try { return parseJSON(text) } catch { return [] }
 }
 
 // ─── Warmup Comment Generation ────────────────────────────────────────────────
