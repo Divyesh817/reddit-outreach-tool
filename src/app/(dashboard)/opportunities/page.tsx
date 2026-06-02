@@ -15,8 +15,8 @@ export default async function OpportunitiesPage({
   const userId = user.id
   const initialStatus = (searchParams.status || 'QUEUED') as string
 
-  const [product, allOpportunities] = await Promise.all([
-    prisma.product.findFirst({
+  const [products, allOpportunities] = await Promise.all([
+    prisma.product.findMany({
       where: { userId, isActive: true },
       select: { id: true, name: true },
       orderBy: { createdAt: 'asc' },
@@ -48,7 +48,8 @@ export default async function OpportunitiesPage({
       <InboxView
         opportunities={allOpportunities as any}
         initialStatus={initialStatus}
-        productName={product?.name ?? 'Your product'}
+        productName={products[0]?.name ?? 'Your product'}
+        products={products}
         counts={counts}
       />
     </div>

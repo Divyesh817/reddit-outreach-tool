@@ -8,7 +8,7 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 export async function scrapeProductProfile(url: string, html: string): Promise<ProductProfile> {
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 1000,
     messages: [{
       role: 'user',
@@ -44,7 +44,7 @@ export async function discoverSubreddits(product: ProductProfile): Promise<Array
   fitReason: string
 }>> {
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 1000,
     messages: [{
       role: 'user',
@@ -83,7 +83,7 @@ export async function scoreOpportunity(
   product: ProductProfile
 ): Promise<ScoringResult> {
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 500,
     messages: [{
       role: 'user',
@@ -146,7 +146,7 @@ export async function generateReply(
     : 'Do NOT mention the product or any URL. Write a purely helpful, empathetic reply that builds goodwill. No pitch at all.'
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 600,
     messages: [{
       role: 'user',
@@ -194,7 +194,7 @@ Return ONLY valid JSON, no markdown:
 async function humaniseReply(text: string, subreddit: string): Promise<string> {
   try {
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 300,
       messages: [{
         role: 'user',
@@ -238,7 +238,7 @@ export async function generateCommentReply(
     : 'Do NOT mention the product or any URL. Write a purely helpful, empathetic reply that adds value.'
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 500,
     messages: [{
       role: 'user',
@@ -280,7 +280,7 @@ Return ONLY valid JSON, no markdown:
 
 export async function generateKeywordSuggestions(product: ProductProfile): Promise<string[]> {
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 400,
     messages: [{
       role: 'user',
@@ -327,7 +327,7 @@ export async function runGeoAnalysis(product: {
   const competitors = Array.isArray(product.competitors) ? (product.competitors as string[]).join(', ') : String(product.competitors ?? '')
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 1800,
     messages: [{
       role: 'user',
@@ -376,7 +376,7 @@ export async function generateWarmupComment(
   thread: { title: string; body: string; subreddit: string }
 ): Promise<string> {
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 200,
     messages: [{
       role: 'user',

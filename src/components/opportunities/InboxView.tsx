@@ -67,6 +67,7 @@ interface Props {
   opportunities: Opportunity[]
   initialStatus: string
   productName: string
+  products: { id: string; name: string }[]
   counts: { queued: number; posted: number; skipped: number }
 }
 
@@ -129,12 +130,16 @@ const INBOX_CSS = `
   .ib-open:hover svg { color:var(--c-orange2) }
 `
 
-export function InboxView({ opportunities: initial, initialStatus, productName, counts: initialCounts }: Props) {
+export function InboxView({ opportunities: initial, initialStatus, productName, products, counts: initialCounts }: Props) {
   const router = useRouter()
 
   const [allOpps, setAllOpps] = useState(initial)
   const [activeStatus, setActiveStatus] = useState(initialStatus)
   const [search, setSearch] = useState('')
+  // All products selected by default
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(
+    new Set(products.map(p => p.id))
+  )
   const [scanning, setScanning] = useState(false)
   const [scanMsg, setScanMsg] = useState('')
   const [comments, setComments] = useState<{ author: string; body: string; score: number }[]>([])
@@ -166,7 +171,10 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
   }
 
   // Derive opps + counts from allOpps to keep everything in sync after actions
-  const opps = allOpps.filter(o => o.status === activeStatus)
+  const opps = allOpps.filter(o =>
+    o.status === activeStatus &&
+    (selectedProductIds.size === 0 || selectedProductIds.has(o.product.id))
+  )
   const counts = {
     queued:  allOpps.filter(o => o.status === 'QUEUED').length,
     posted:  allOpps.filter(o => o.status === 'POSTED').length,
@@ -460,6 +468,67 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
                 fontFamily: 'JetBrains Mono, monospace',
               }}>
                 {scanMsg}
+              </div>
+            )}
+
+            {/* Product filter — only show when there are multiple products */}
+            {products.length > 1 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={{
+                  fontSize: 11, fontWeight: 600, color: S.text3,
+                  textTransform: 'uppercase', letterSpacing: '.08em',
+                  fontFamily: 'JetBrains Mono, monospace',
+                }}>Filter by product</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {products.map(p => {
+                    const checked = selectedProductIds.has(p.id)
+                    return (
+                      <label key={p.id} style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        cursor: 'pointer', padding: '5px 8px', borderRadius: 7,
+                        background: checked ? S.orangeSoft : 'transparent',
+                        border: `1px solid ${checked ? S.orangeLine : 'transparent'}`,
+                        transition: 'all .12s',
+                      }}>
+                        <div
+                          onClick={() => setSelectedProductIds(prev => {
+                            const next = new Set(prev)
+                            if (next.has(p.id)) next.delete(p.id)
+                            else next.add(p.id)
+                            return next
+                          })}
+                          style={{
+                            width: 15, height: 15, borderRadius: 4, flexShrink: 0,
+                            background: checked ? S.orange : 'transparent',
+                            border: `2px solid ${checked ? S.orange : S.text3}`,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {checked && (
+                            <svg width="9" height="9" viewBox="0 0 12 12" fill="none">
+                              <polyline points="2 6 5 9 10 3" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          )}
+                        </div>
+                        <span style={{
+                          fontSize: 13, fontWeight: checked ? 600 : 400,
+                          color: checked ? S.text : S.text3,
+                          flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                          {p.name}
+                        </span>
+                        <span style={{
+                          fontSize: 11, fontFamily: 'JetBrains Mono, monospace',
+                          color: checked ? S.orange2 : S.text4,
+                          fontWeight: 600,
+                        }}>
+                          {allOpps.filter(o => o.product.id === p.id && o.status === activeStatus).length}
+                        </span>
+                      </label>
+                    )
+                  })}
+                </div>
               </div>
             )}
 

@@ -235,7 +235,7 @@ function AccountPanel({ user, initial }: { user: Props['user']; initial: string 
       </Row>
 
       {/* Email */}
-      <Row label="Email" hint="Set via Google OAuth — raise a support ticket to change.">
+      <Row label="Email" hint="Set via Google OAuth — raise a support ticket to change." last>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 16, fontWeight: 500, color: S.text }}>{user.email}</span>
           <span style={{
@@ -248,34 +248,6 @@ function AccountPanel({ user, initial }: { user: Props['user']; initial: string 
         </div>
       </Row>
 
-      {/* Reddit */}
-      <Row label="Reddit account" hint="Optional — needed only for auto-posting." last>
-        {user.redditUsername ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: 16, fontWeight: 600, color: S.text }}>u/{user.redditUsername}</span>
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              fontSize: 13, fontWeight: 600, color: S.green, padding: '3px 10px',
-              background: S.greenSoft, borderRadius: 99,
-            }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: S.green, display: 'inline-block' }} />
-              Connected
-            </span>
-            <a href="/api/reddit/connect" style={{ fontSize: 14, color: S.text3, textDecoration: 'none' }}>Reconnect</a>
-          </div>
-        ) : (
-          <a href="/api/reddit/connect" style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 18px',
-            background: '#FF4500', color: '#fff', textDecoration: 'none',
-            borderRadius: 8, fontSize: 15, fontWeight: 600,
-          }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .379-.239l2.906.617a1.214 1.214 0 0 1 1.108-.701z"/>
-            </svg>
-            Connect Reddit (optional)
-          </a>
-        )}
-      </Row>
     </Panel>
   )
 }
