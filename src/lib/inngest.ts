@@ -250,7 +250,7 @@ async function scanSubredditForProduct(
 //     return { totalCreated }
 //   }
 // )
-export const scanSubreddits = { } as any // placeholder while paused
+// scanSubreddits paused — not registered
 
 // ─── Job 2: Post approved replies ─────────────────────────────────────────────
 
@@ -682,6 +682,6 @@ export const weeklySummary = inngest.createFunction(
 )
 
 export const functions = [
-  scanSubreddits, manualScan, postApprovedReplies, dailyWarmup,
+  manualScan, postApprovedReplies, dailyWarmup,
   weeklyGeoDigest, welcomeEmail, dailyDigest, weeklySummary,
 ]
