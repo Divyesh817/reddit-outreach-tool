@@ -83,7 +83,7 @@ export async function POST(req: Request) {
   const remainingOpps = limits.opportunitiesPerMonth - oppsThisMonth
   const perScanCap = Math.min(remainingOpps, limits.threadsPerSubreddit)
 
-  const MIN_LEADS = 8
+  const MIN_LEADS = 5
 
   const base = Math.max(limits.lookbackHours, 48)
   const lookbackWindows = Array.from(new Set([base, Math.max(base, 96), Math.max(base * 2, 168)]))
@@ -119,18 +119,18 @@ export async function POST(req: Request) {
       const subreddit = await prisma.subreddit.findUnique({ where: { id: subredditId }, select: { id: true, name: true } })
       if (!subreddit) continue
 
-      // Filter by lookback + quality
+      // Filter by lookback + quality — require some engagement so single-upvote posts don't make it in
       const fresh = rawThreads.filter(t => {
         const d = new Date(t.created_utc * 1000)
         if (d < cutoffTime) return false
         if (t.author === '[deleted]' || t.author === 'AutoModerator') return false
         if (t.title === '[deleted]' || t.title === '[removed]') return false
-        if (t.score < -3) return false
+        if (t.score < 1) return false
+        if (t.score < 3 && (t.num_comments ?? 0) < 2) return false
         return true
       })
 
-      const isLastAttempt = attempt === lookbackWindows.length - 1
-      const candidates = isLastAttempt ? fresh : fresh.filter(t => passesIntentPreFilter(t, profile))
+      const candidates = fresh.filter(t => passesIntentPreFilter(t, profile))
       totalScanned += candidates.length
 
       const existingIds = new Set(
