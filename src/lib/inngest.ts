@@ -3,8 +3,7 @@ import { Inngest } from 'inngest'
 import { Resend } from 'resend'
 import { prisma } from '@/lib/prisma'
 import { fetchThreadsViaApify, fetchNewThreads, checkDailyPostingLimit, checkSubredditCooldown,
-         checkShadowban, checkCommentVisible, fetchSubredditRules,
-         fetchAccountKarma, postReply } from '@/lib/reddit'
+         checkCommentVisible, postReply } from '@/lib/reddit'
 import { scoreOpportunity, generateReply, generateWarmupComment, runGeoAnalysis } from '@/lib/anthropic'
 import { sendWelcomeEmail, sendHighIntentAlert, sendDailyDigest, sendWeeklySummary } from '@/lib/emails'
 import { SAFETY } from '@/types'
@@ -74,7 +73,7 @@ async function scanSubredditForProduct(
       )
     } catch { continue }
 
-    if (scoring.intentScore < 30) continue
+    if (scoring.intentScore < 60) continue
 
     const opportunity = await prisma.opportunity.create({
       data: {
@@ -329,43 +328,6 @@ export const dailyWarmup = inngest.createFunction(
             status: isComplete ? 'COMPLETED' : 'IN_PROGRESS',
             completedAt: isComplete ? new Date() : null,
           }
-        })
-      })
-    }
-  }
-)
-
-// ─── Job 4: Account health check ──────────────────────────────────────────────
-
-export const healthCheck = inngest.createFunction(
-  { id: 'health-check' },
-  { cron: '0 */6 * * *' }, // every 6 hours
-  async ({ step }) => {
-    const users = await step.run('fetch-users', async () => {
-      return prisma.user.findMany({
-        where: { redditUsername: { not: null }, redditAccessToken: { not: null } }
-      })
-    })
-
-    for (const user of users) {
-      await step.run(`health-${user.id}`, async () => {
-        const isShadowbanned = await checkShadowban(user.redditUsername!)
-        const { karma, accountAgeDays } = await fetchAccountKarma(
-          user.redditUsername!,
-          user.redditAccessToken!,
-          user.redditRefreshToken!
-        )
-
-        const healthScore = Math.min(100, Math.max(0,
-          (isShadowbanned ? 0 : 50) +
-          Math.min(25, accountAgeDays / 4) +
-          Math.min(25, karma / 40)
-        ))
-
-        await prisma.accountHealth.upsert({
-          where: { userId: user.id },
-          update: { isShadowbanned, karma, accountAgeDays, healthScore, updatedAt: new Date() },
-          create: { userId: user.id, isShadowbanned, karma, accountAgeDays, healthScore }
         })
       })
     }
@@ -643,6 +605,6 @@ export const weeklySummary = inngest.createFunction(
 )
 
 export const functions = [
-  scanSubreddits, manualScan, postApprovedReplies, dailyWarmup, healthCheck,
+  scanSubreddits, manualScan, postApprovedReplies, dailyWarmup,
   weeklyGeoDigest, welcomeEmail, dailyDigest, weeklySummary,
 ]

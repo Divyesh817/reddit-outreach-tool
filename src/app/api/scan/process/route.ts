@@ -85,7 +85,7 @@ export async function POST(req: Request) {
 
   const base = Math.max(limits.lookbackHours, 24)
   const lookbackWindows = Array.from(new Set([base, Math.max(base, 72), Math.max(base * 2, 96)]))
-  const intentThresholds = [25, 15, 10]
+  const intentThresholds = [60, 60, 60]
 
   let totalCreated = 0
   let totalScanned = 0

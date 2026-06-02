@@ -136,10 +136,10 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
   const [allOpps, setAllOpps] = useState(initial)
   const [activeStatus, setActiveStatus] = useState(initialStatus)
   const [search, setSearch] = useState('')
-  // All products selected by default
-  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(
-    new Set(products.map(p => p.id))
-  )
+  // 'all' or a specific product id
+  const [filterProductId, setFilterProductId] = useState<string>('all')
+  // 'all' or a specific product id for scanning
+  const [scanProductId, setScanProductId] = useState<string>('all')
   const [scanning, setScanning] = useState(false)
   const [scanMsg, setScanMsg] = useState('')
   const [comments, setComments] = useState<{ author: string; body: string; score: number }[]>([])
@@ -173,7 +173,7 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
   // Derive opps + counts from allOpps to keep everything in sync after actions
   const opps = allOpps.filter(o =>
     o.status === activeStatus &&
-    (selectedProductIds.size === 0 || selectedProductIds.has(o.product.id))
+    (filterProductId === 'all' || o.product.id === filterProductId)
   )
   const counts = {
     queued:  allOpps.filter(o => o.status === 'QUEUED').length,
@@ -361,7 +361,9 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
         return
       }
 
-      const subreddits: { subredditId: string; subredditName: string; productId: string }[] = prep.subreddits ?? []
+      let subreddits: { subredditId: string; subredditName: string; productId: string }[] = prep.subreddits ?? []
+      // Filter to selected product if not "all"
+      if (scanProductId !== 'all') subreddits = subreddits.filter(s => s.productId === scanProductId)
       if (!subreddits.length) {
         setScanMsg('No subreddits configured — add some in Products')
         setTimeout(() => setScanMsg(''), 6000)
@@ -433,30 +435,51 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
             {/* Title */}
             <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: '-.015em', color: S.text }}>Inbox</h2>
 
-            {/* Hero scan button */}
-            <button
-              onClick={handleScan}
-              disabled={scanning}
-              style={{
-                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                gap: 9, padding: '11px 16px', borderRadius: 10, cursor: scanning ? 'not-allowed' : 'pointer',
-                fontFamily: 'inherit', fontSize: 15, fontWeight: 700, letterSpacing: '-.01em',
-                background: scanning
-                  ? S.orangeSoft
-                  : `linear-gradient(135deg, ${S.orange} 0%, #E54B1B 100%)`,
-                color: scanning ? S.orange2 : '#fff',
-                border: `1px solid ${scanning ? S.orangeLine : 'transparent'}`,
-                boxShadow: scanning ? 'none' : 'inset 0 -2px 0 rgba(0,0,0,.2), 0 4px 14px rgba(255,87,34,.35)',
-                transition: 'all .15s',
-              }}
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
-                className={scanning ? 'ib-spin' : undefined} style={{ flexShrink: 0 }}>
-                <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-              </svg>
-              {scanning ? 'Scanning Reddit…' : 'Scan for leads'}
-            </button>
+            {/* Scan row — button + optional product selector */}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={handleScan}
+                disabled={scanning}
+                style={{
+                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  gap: 9, padding: '11px 16px', borderRadius: 10, cursor: scanning ? 'not-allowed' : 'pointer',
+                  fontFamily: 'inherit', fontSize: 15, fontWeight: 700, letterSpacing: '-.01em',
+                  background: scanning
+                    ? S.orangeSoft
+                    : `linear-gradient(135deg, ${S.orange} 0%, #E54B1B 100%)`,
+                  color: scanning ? S.orange2 : '#fff',
+                  border: `1px solid ${scanning ? S.orangeLine : 'transparent'}`,
+                  boxShadow: scanning ? 'none' : 'inset 0 -2px 0 rgba(0,0,0,.2), 0 4px 14px rgba(255,87,34,.35)',
+                  transition: 'all .15s',
+                }}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+                  className={scanning ? 'ib-spin' : undefined} style={{ flexShrink: 0 }}>
+                  <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                </svg>
+                {scanning ? 'Scanning…' : 'Scan for leads'}
+              </button>
+              {/* Product selector for scan — only when multiple products */}
+              {products.length > 1 && (
+                <select
+                  value={scanProductId}
+                  onChange={e => setScanProductId(e.target.value)}
+                  disabled={scanning}
+                  style={{
+                    padding: '0 10px', borderRadius: 10, fontSize: 13, fontWeight: 500,
+                    background: S.card, border: `1px solid ${S.line}`, color: S.text,
+                    cursor: 'pointer', fontFamily: 'inherit', outline: 'none',
+                    flexShrink: 0, maxWidth: 110,
+                  }}
+                >
+                  <option value="all">All</option>
+                  {products.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              )}
+            </div>
 
             {/* Scan result pill */}
             {scanMsg && (
@@ -471,65 +494,28 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
               </div>
             )}
 
-            {/* Product filter — only show when there are multiple products */}
+            {/* Product filter dropdown — only when multiple products */}
             {products.length > 1 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <span style={{
-                  fontSize: 11, fontWeight: 600, color: S.text3,
-                  textTransform: 'uppercase', letterSpacing: '.08em',
-                  fontFamily: 'JetBrains Mono, monospace',
-                }}>Filter by product</span>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {products.map(p => {
-                    const checked = selectedProductIds.has(p.id)
-                    return (
-                      <label key={p.id} style={{
-                        display: 'flex', alignItems: 'center', gap: 8,
-                        cursor: 'pointer', padding: '5px 8px', borderRadius: 7,
-                        background: checked ? S.orangeSoft : 'transparent',
-                        border: `1px solid ${checked ? S.orangeLine : 'transparent'}`,
-                        transition: 'all .12s',
-                      }}>
-                        <div
-                          onClick={() => setSelectedProductIds(prev => {
-                            const next = new Set(prev)
-                            if (next.has(p.id)) next.delete(p.id)
-                            else next.add(p.id)
-                            return next
-                          })}
-                          style={{
-                            width: 15, height: 15, borderRadius: 4, flexShrink: 0,
-                            background: checked ? S.orange : 'transparent',
-                            border: `2px solid ${checked ? S.orange : S.text3}`,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {checked && (
-                            <svg width="9" height="9" viewBox="0 0 12 12" fill="none">
-                              <polyline points="2 6 5 9 10 3" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                          )}
-                        </div>
-                        <span style={{
-                          fontSize: 13, fontWeight: checked ? 600 : 400,
-                          color: checked ? S.text : S.text3,
-                          flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        }}>
-                          {p.name}
-                        </span>
-                        <span style={{
-                          fontSize: 11, fontFamily: 'JetBrains Mono, monospace',
-                          color: checked ? S.orange2 : S.text4,
-                          fontWeight: 600,
-                        }}>
-                          {allOpps.filter(o => o.product.id === p.id && o.status === activeStatus).length}
-                        </span>
-                      </label>
-                    )
-                  })}
-                </div>
-              </div>
+              <select
+                value={filterProductId}
+                onChange={e => {
+                  setFilterProductId(e.target.value)
+                  setSelected(null)
+                  setSearch('')
+                }}
+                style={{
+                  width: '100%', padding: '9px 12px', borderRadius: 8, fontSize: 14,
+                  fontWeight: 500, background: S.card, border: `1px solid ${S.line}`,
+                  color: S.text, cursor: 'pointer', fontFamily: 'inherit', outline: 'none',
+                }}
+              >
+                <option value="all">All products ({allOpps.filter(o => o.status === activeStatus).length})</option>
+                {products.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({allOpps.filter(o => o.product.id === p.id && o.status === activeStatus).length})
+                  </option>
+                ))}
+              </select>
             )}
 
             {/* Status tabs */}
@@ -908,9 +894,9 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
                     </span>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 16, fontWeight: 600, color: S.text, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        Why this matched
+                        Why this intent score
                         <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, letterSpacing: '.06em', textTransform: 'uppercase', padding: '2px 7px', borderRadius: 4, background: S.purpleSoft, color: S.purple, fontWeight: 600 }}>
-                          AI rationale
+                          AI scoring
                         </span>
                       </div>
                       <p style={{ margin: 0, fontSize: 16, color: S.text2, lineHeight: 1.55 }}>{selected.scoringReasoning}</p>
