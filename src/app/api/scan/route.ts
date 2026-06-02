@@ -56,14 +56,14 @@ export async function POST() {
   const subreddits = products.flatMap(p =>
     p.subreddits.map(s => ({
       subredditId: s.id,
-      subredditName: s.name,
+      subredditName: s.name.replace(/^\/?r\//i, ''),
       productId: p.id,
     }))
   )
 
   return NextResponse.json({
     subreddits,
-    fetchLimit: Math.min(15, Math.ceil(limits.threadsPerSubreddit / 2)),
+    fetchLimit: Math.min(25, limits.threadsPerSubreddit),
     lookbackHours: Math.max(limits.lookbackHours, 24),
     plan,
   })

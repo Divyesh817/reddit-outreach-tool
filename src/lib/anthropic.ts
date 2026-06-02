@@ -111,19 +111,12 @@ PAIN TYPES:
 - roi_frustration: using tools but getting no results / ROI
 - workflow_pain: struggling with the core problem the product solves
 
-SCORING GUIDE — use the full 0–100 range, not just round numbers:
-- 90–100: Person is actively asking for a tool exactly like this product, mentions switching, or is evaluating options now
-- 75–89: Strong pain signal directly related to what the product solves, likely open to solutions
-- 60–74: Clear pain but less urgency, or partially related use case
-- 40–59: Tangentially relevant, mild frustration, no clear buying signal
-- 0–39: Not relevant, venting without seeking solutions, or hostile to promotion
-
 Return ONLY valid JSON, no markdown:
 {
-  "intentScore": <integer 0-100, use the full range — avoid clustering around 25/75/85>,
+  "intentScore": 0-100,
   "painType": "one of the 5 pain types",
   "shouldPitch": true/false,
-  "reasoning": "1-2 sentences explaining the specific score chosen and why"
+  "reasoning": "1-2 sentences explaining the score and classification"
 }
 
 shouldPitch = false if: thread is just venting with no solution-seeking, thread is hostile to marketing, or pitching would get downvoted.`

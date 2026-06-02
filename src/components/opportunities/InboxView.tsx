@@ -381,7 +381,9 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
       }
 
       // Fetch new + top/week from Reddit, fall back to Pullpush then RSS
-      async function fetchThreadsForSub(name: string): Promise<any[]> {
+      async function fetchThreadsForSub(rawName: string): Promise<any[]> {
+        // Strip leading r/ or /r/ so URL is always reddit.com/r/SaaS not reddit.com/r/r/SaaS
+        const name = rawName.replace(/^\/?r\//i, '')
         const seen = new Set<string>()
         const merged: any[] = []
 
@@ -512,6 +514,9 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
       const batches: (typeof subreddits)[] = []
       for (let i = 0; i < subreddits.length; i += BATCH) batches.push(subreddits.slice(i, i + BATCH))
       for (const batch of batches) await fetchAndScore(batch)
+
+      // Silently backfill past 21 days in background — no await, no UI feedback
+      fetch('/api/scan/backfill', { method: 'POST' }).then(r => r.ok && router.refresh()).catch(() => {})
 
       setScanMsg('')
       if (totalCreated > 0) {

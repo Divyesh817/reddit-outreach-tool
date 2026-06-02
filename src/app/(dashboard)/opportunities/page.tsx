@@ -22,7 +22,10 @@ export default async function OpportunitiesPage({
       orderBy: { createdAt: 'asc' },
     }),
     prisma.opportunity.findMany({
-      where: { product: { userId } },
+      where: {
+        product: { userId },
+        redditPostedAt: { gte: new Date(Date.now() - 21 * 24 * 60 * 60 * 1000) },
+      },
       orderBy: { intentScore: 'desc' },
       take: 200,
       include: {

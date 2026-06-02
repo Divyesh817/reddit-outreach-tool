@@ -55,13 +55,39 @@ async function concurrent<T>(
   return results
 }
 
+async function fetchCommentsRss(threadId: string): Promise<string[]> {
+  try {
+    const res = await fetch(
+      `https://www.reddit.com/comments/${threadId}.rss?limit=8`,
+      { headers: { 'User-Agent': 'Feedly/1.0 (+https://feedly.com/fetcher.html)' }, next: { revalidate: 0 } }
+    )
+    if (!res.ok) return []
+    const xml = await res.text()
+    const entries: string[] = []
+    const re = /<entry>([\s\S]*?)<\/entry>/g
+    let em: RegExpExecArray | null
+    let skip = true // first entry is the post itself
+    while ((em = re.exec(xml)) !== null) {
+      if (skip) { skip = false; continue }
+      const content = em[1].match(/<content[^>]*>([\s\S]*?)<\/content>/)?.[1] ?? ''
+      const text = content
+        .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+        .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300)
+      if (text.length > 10) entries.push(text)
+      if (entries.length >= 5) break
+    }
+    return entries
+  } catch {
+    return []
+  }
+}
+
 export async function POST(req: Request) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  // Array of { subredditId, productId, threads: RawThread[] }
   const subredditsData: { subredditId: string; productId: string; threads: RawThread[] }[] = body.subredditsData ?? []
 
   if (!subredditsData.length) {
@@ -83,12 +109,9 @@ export async function POST(req: Request) {
   const remainingOpps = limits.opportunitiesPerMonth - oppsThisMonth
   const perScanCap = Math.min(remainingOpps, limits.threadsPerSubreddit)
 
-  const MIN_LEADS = 5
-
-  const base = Math.max(limits.lookbackHours, 48)
-  const lookbackWindows = Array.from(new Set([base, Math.max(base, 96), Math.max(base * 2, 168)]))
-  // Drop threshold each attempt so we always surface MIN_LEADS
-  const intentThresholds = [65, 50, 35]
+  const base = Math.max(limits.lookbackHours, 24)
+  const lookbackWindows = Array.from(new Set([base, Math.max(base, 72), Math.max(base * 2, 96)]))
+  const intentThresholds = [25, 15, 10]
 
   let totalCreated = 0
   let totalScanned = 0
@@ -119,18 +142,17 @@ export async function POST(req: Request) {
       const subreddit = await prisma.subreddit.findUnique({ where: { id: subredditId }, select: { id: true, name: true } })
       if (!subreddit) continue
 
-      // Filter by lookback + quality — require some engagement so single-upvote posts don't make it in
       const fresh = rawThreads.filter(t => {
         const d = new Date(t.created_utc * 1000)
         if (d < cutoffTime) return false
         if (t.author === '[deleted]' || t.author === 'AutoModerator') return false
         if (t.title === '[deleted]' || t.title === '[removed]') return false
-        if (t.score < 1) return false
-        if (t.score < 3 && (t.num_comments ?? 0) < 2) return false
+        if (t.score < -3) return false
         return true
       })
 
-      const candidates = fresh.filter(t => passesIntentPreFilter(t, profile))
+      const isLastAttempt = attempt === lookbackWindows.length - 1
+      const candidates = isLastAttempt ? fresh : fresh.filter(t => passesIntentPreFilter(t, profile))
       totalScanned += candidates.length
 
       const existingIds = new Set(
@@ -140,7 +162,7 @@ export async function POST(req: Request) {
         })).map(o => o.redditPostId)
       )
 
-      const toScore = candidates.filter(t => !existingIds.has(t.id)).slice(0, Math.min(15, perScanCap))
+      const toScore = candidates.filter(t => !existingIds.has(t.id)).slice(0, Math.min(8, perScanCap))
 
       const scoringResults = await concurrent(
         toScore,
@@ -166,19 +188,10 @@ export async function POST(req: Request) {
         if (scoring.intentScore < minIntentScore) continue
         const threadDate = new Date(thread.created_utc * 1000)
         try {
-          // Fetch comments via multi-source (Pullpush → Arctic Shift → RSS)
+          // Fetch comments via RSS and store them with the opportunity
           let topComments: string[] = thread.comments ?? []
           if (topComments.length === 0) {
-            try {
-              const commentRes = await fetch(
-                `${process.env.NEXT_PUBLIC_APP_URL}/api/reddit/comments?url=https://reddit.com${thread.permalink}`,
-                { next: { revalidate: 0 } }
-              )
-              if (commentRes.ok) {
-                const commentData = await commentRes.json()
-                topComments = (commentData.comments ?? []).map((c: any) => c.body).filter(Boolean).slice(0, 5)
-              }
-            } catch { /* non-fatal */ }
+            topComments = await fetchCommentsRss(thread.id)
           }
 
           await prisma.opportunity.create({
@@ -210,10 +223,9 @@ export async function POST(req: Request) {
       if (totalCreated >= perScanCap) break
     }
 
-    if (totalCreated >= MIN_LEADS) break
+    if (totalCreated > 0) break
   }
 
-  // Fire async Inngest job to backfill comments via Apify for any leads that were created without them
   if (totalCreated > 0) {
     try {
       await inngest.send({ name: 'scan/manual', data: { userId: user.id } })
