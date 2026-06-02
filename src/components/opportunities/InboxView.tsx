@@ -258,32 +258,17 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
       setCommentsError('')
       return
     }
-    // No stored comments — try live browser fetch (user's IP bypasses Vercel block)
+    // No stored comments — fetch via server proxy (Pullpush → Arctic Shift → RSS)
     setCommentsLoading(true)
     setCommentsError('')
     try {
-      const postId = opp.redditPostUrl.split('/comments/')[1]?.split('/')[0]
-      if (!postId) throw new Error('no id')
-      const res = await fetch(
-        `https://www.reddit.com/comments/${postId}.json?limit=8&depth=1&raw_json=1`
-      )
-      if (!res.ok) throw new Error(`${res.status}`)
+      const res = await fetch(`/api/reddit/comments?url=${encodeURIComponent(opp.redditPostUrl)}`)
       const data = await res.json()
-      const fetched = (data?.[1]?.data?.children ?? [])
-        .filter((c: any) =>
-          c.kind === 't1' &&
-          c.data?.body &&
-          c.data.body !== '[deleted]' &&
-          c.data.body !== '[removed]' &&
-          c.data.author !== 'AutoModerator'
-        )
-        .slice(0, 8)
-        .map((c: any) => ({
-          author: c.data.author as string,
-          body: c.data.body as string,
-          score: c.data.score as number,
-        }))
-      setComments(fetched)
+      if (data.comments?.length > 0) {
+        setComments(data.comments)
+      } else {
+        setComments([])
+      }
     } catch {
       setComments([])
       setCommentsError('unavailable')
@@ -384,8 +369,8 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
 
       const totalFetched = subredditsData.reduce((s, d) => s + d.threads.length, 0)
       if (!totalFetched) {
-        setScanMsg('Could not reach Reddit — check your connection')
-        setTimeout(() => setScanMsg(''), 6000)
+        setScanMsg('No threads found — Reddit may be temporarily unavailable. Try again in a moment.')
+        setTimeout(() => setScanMsg(''), 8000)
         setScanning(false)
         return
       }
