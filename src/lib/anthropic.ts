@@ -5,20 +5,20 @@ import type { ProductProfile, ScoringResult, ReplyResult, PainType } from '@/typ
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 function parseJSON(text: string) {
-  // Strip markdown code fences Claude sometimes adds despite being told not to
-  const clean = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim()
+  // Strip markdown code fences and any leading/trailing prose
+  let clean = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim()
+  // Extract first JSON object or array if Claude added extra text around it
+  const objMatch = clean.match(/\{[\s\S]*\}/)
+  const arrMatch = clean.match(/\[[\s\S]*\]/)
+  if (objMatch && (!arrMatch || objMatch.index! <= arrMatch.index!)) clean = objMatch[0]
+  else if (arrMatch) clean = arrMatch[0]
   return JSON.parse(clean)
 }
 
 // ─── Product Scraper ──────────────────────────────────────────────────────────
 
 export async function scrapeProductProfile(url: string, html: string): Promise<ProductProfile> {
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 1000,
-    messages: [{
-      role: 'user',
-      content: `You are analysing a SaaS product. Extract a structured product profile.
+  const prompt = `You are analysing a SaaS product. Extract a structured product profile.
 
 URL: ${url}
 
@@ -34,12 +34,37 @@ Return ONLY valid JSON, no markdown, no explanation:
   "summary": "3-4 sentence summary optimised for Reddit reply generation — include audience, pain solved, key differentiator"
 }
 
-If HTML is unavailable, make your best inference from the URL and domain name. Always return a complete JSON object.`
-    }]
-  })
+If HTML is unavailable, make your best inference from the URL and domain name. Always return a complete JSON object with all 6 fields populated.`
 
-  const text = response.content[0].type === 'text' ? response.content[0].text : ''
-  return parseJSON(text) as ProductProfile
+  let parsed: any = null
+
+  // Try twice — Claude occasionally wraps in prose on first attempt
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const response = await client.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+      const text = response.content[0].type === 'text' ? response.content[0].text : ''
+      parsed = parseJSON(text)
+      break
+    } catch {
+      if (attempt === 1) throw new Error('Failed to parse product profile from AI response')
+    }
+  }
+
+  // Guarantee every field is present and non-null — DB columns are NOT NULL
+  const domain = (() => { try { return new URL(url).hostname.replace(/^www\./, '') } catch { return url } })()
+  return {
+    url,
+    name:           String(parsed?.name           || domain),
+    description:    String(parsed?.description    || `A product at ${domain}`),
+    targetAudience: String(parsed?.targetAudience || 'Business owners and professionals'),
+    keyBenefits:    Array.isArray(parsed?.keyBenefits)  ? parsed.keyBenefits.map(String).filter(Boolean)  : [],
+    competitors:    Array.isArray(parsed?.competitors)  ? parsed.competitors.map(String).filter(Boolean)   : [],
+    summary:        String(parsed?.summary || parsed?.description || `A product at ${domain}`),
+  }
 }
 
 // ─── Subreddit Discovery ──────────────────────────────────────────────────────
@@ -78,8 +103,18 @@ Return 8–12 subreddits.`
     }]
   })
 
-  const text = response.content[0].type === 'text' ? response.content[0].text : '[]'
-  return parseJSON(text)
+  try {
+    const text = response.content[0].type === 'text' ? response.content[0].text : '[]'
+    const parsed = parseJSON(text)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter((s: any) => s?.name)
+      .map((s: any) => ({
+        name: String(s.name).replace(/^\/?r\//i, '').trim(),
+        fitScore: Math.min(100, Math.max(0, Number(s.fitScore) || 70)),
+        fitReason: String(s.fitReason || ''),
+      }))
+  } catch { return [] }
 }
 
 // ─── Intent Scoring ───────────────────────────────────────────────────────────
