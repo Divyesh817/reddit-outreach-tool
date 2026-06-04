@@ -59,13 +59,6 @@ export async function POST(req: NextRequest) {
   // Discover subreddits
   const suggestedSubreddits = await discoverSubreddits(profile)
 
-  // Fetch favicon via Google's favicon service
-  let logoUrl: string | null = null
-  try {
-    const domain = new URL(url).hostname
-    logoUrl = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=64`
-  } catch { /* non-fatal */ }
-
   // Create product
   const product = await prisma.product.create({
     data: {
@@ -77,10 +70,16 @@ export async function POST(req: NextRequest) {
       keyBenefits: profile.keyBenefits,
       competitors: profile.competitors,
       summary: profile.summary,
-      logoUrl,
       lastScrapedAt: new Date(),
     },
   })
+
+  // Set logoUrl via raw SQL — non-fatal, bypasses Prisma client cache issues
+  try {
+    const domain = new URL(url).hostname
+    const logoUrl = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=64`
+    await prisma.$executeRaw`UPDATE products SET "logoUrl" = ${logoUrl} WHERE id = ${product.id}`
+  } catch { /* non-fatal */ }
 
   // Create subreddits (with rules scan)
   await Promise.allSettled(

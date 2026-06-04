@@ -20,13 +20,7 @@ export async function POST(req: NextRequest) {
       update: {},
     })
 
-    // Favicon — non-fatal
-    let logoUrl: string | null = null
-    try {
-      const domain = new URL(url).hostname
-      logoUrl = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=64`
-    } catch { /* non-fatal */ }
-
+    // Create product — no logoUrl here to avoid Prisma client cache mismatch
     const product = await prisma.product.create({
       data: {
         userId: user.id,
@@ -38,10 +32,16 @@ export async function POST(req: NextRequest) {
         competitors: Array.isArray(profile.competitors) ? profile.competitors : [],
         keywords: Array.isArray(keywords) ? keywords.slice(0, 30) : [],
         summary: profile.summary || profile.description || '',
-        logoUrl,
         lastScrapedAt: new Date(),
       },
     })
+
+    // Set logoUrl via raw SQL — bypasses Prisma client version issues, non-fatal
+    try {
+      const domain = new URL(url).hostname
+      const logoUrl = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=64`
+      await prisma.$executeRaw`UPDATE products SET "logoUrl" = ${logoUrl} WHERE id = ${product.id}`
+    } catch { /* non-fatal */ }
 
     // Create selected subreddits — strip any r/ prefix Claude may have included
     const subsToCreate: string[] = Array.isArray(selectedSubreddits) ? selectedSubreddits : []
@@ -59,6 +59,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ productId: product.id })
   } catch (e: any) {
     console.error('[onboarding/complete]', e?.message, e?.code)
-    return NextResponse.json({ error: 'Failed to save product — please try again' }, { status: 500 })
+    return NextResponse.json({ error: e?.message ?? 'Server error' }, { status: 500 })
   }
 }
