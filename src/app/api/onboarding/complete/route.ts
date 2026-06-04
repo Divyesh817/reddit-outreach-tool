@@ -13,8 +13,7 @@ export async function POST(req: NextRequest) {
     const { url, profile, selectedSubreddits, keywords } = await req.json()
     if (!url || !profile) return NextResponse.json({ error: 'Missing data' }, { status: 400 })
 
-    // Ensure user exists in DB — fall back to email lookup if ID mismatch
-    let dbUserId = user.id
+    // Resolve DB user — handles the case where Supabase auth ID differs from existing DB record
     try {
       await prisma.user.upsert({
         where: { id: user.id },
@@ -22,15 +21,19 @@ export async function POST(req: NextRequest) {
         update: {},
       })
     } catch {
+      // Email already exists under a different ID — migrate that record to the current auth ID
       const existing = await prisma.user.findUnique({ where: { email: user.email ?? '' } })
-      if (existing) { dbUserId = existing.id }
-      else throw new Error('Could not resolve user account')
+      if (!existing) throw new Error('Could not resolve user account')
+
+      // Move all products to the new auth ID, then update the user row
+      await prisma.$executeRaw`UPDATE products SET "userId" = ${user.id} WHERE "userId" = ${existing.id}`
+      await prisma.$executeRaw`UPDATE users SET id = ${user.id} WHERE id = ${existing.id}`
     }
 
-    // Create product — no logoUrl here to avoid Prisma client cache mismatch
+    // Create product
     const product = await prisma.product.create({
       data: {
-        userId: dbUserId,
+        userId: user.id,
         url,
         name: profile.name || 'My Product',
         description: profile.description || '',
@@ -43,14 +46,14 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // Set logoUrl via raw SQL — bypasses Prisma client version issues, non-fatal
+    // Set logoUrl via raw SQL — non-fatal
     try {
       const domain = new URL(url).hostname
       const logoUrl = `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=64`
       await prisma.$executeRaw`UPDATE products SET "logoUrl" = ${logoUrl} WHERE id = ${product.id}`
     } catch { /* non-fatal */ }
 
-    // Create selected subreddits — strip any r/ prefix Claude may have included
+    // Create selected subreddits — strip any r/ prefix
     const subsToCreate: string[] = Array.isArray(selectedSubreddits) ? selectedSubreddits : []
     if (subsToCreate.length > 0) {
       await prisma.subreddit.createMany({
