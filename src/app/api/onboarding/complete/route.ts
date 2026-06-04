@@ -13,17 +13,24 @@ export async function POST(req: NextRequest) {
     const { url, profile, selectedSubreddits, keywords } = await req.json()
     if (!url || !profile) return NextResponse.json({ error: 'Missing data' }, { status: 400 })
 
-    // Ensure user exists in DB
-    await prisma.user.upsert({
-      where: { id: user.id },
-      create: { id: user.id, email: user.email ?? '' },
-      update: {},
-    })
+    // Ensure user exists in DB — fall back to email lookup if ID mismatch
+    let dbUserId = user.id
+    try {
+      await prisma.user.upsert({
+        where: { id: user.id },
+        create: { id: user.id, email: user.email ?? '' },
+        update: {},
+      })
+    } catch {
+      const existing = await prisma.user.findUnique({ where: { email: user.email ?? '' } })
+      if (existing) { dbUserId = existing.id }
+      else throw new Error('Could not resolve user account')
+    }
 
     // Create product — no logoUrl here to avoid Prisma client cache mismatch
     const product = await prisma.product.create({
       data: {
-        userId: user.id,
+        userId: dbUserId,
         url,
         name: profile.name || 'My Product',
         description: profile.description || '',
