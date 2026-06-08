@@ -25,9 +25,9 @@ export async function POST(req: NextRequest) {
       const existing = await prisma.user.findUnique({ where: { email: user.email ?? '' } })
       if (!existing) throw new Error('Could not resolve user account')
 
-      // Move all products to the new auth ID, then update the user row
-      await prisma.$executeRaw`UPDATE products SET "userId" = ${user.id} WHERE "userId" = ${existing.id}`
+      // Update user row first (FK parent), then migrate products to the new ID
       await prisma.$executeRaw`UPDATE users SET id = ${user.id} WHERE id = ${existing.id}`
+      await prisma.$executeRaw`UPDATE products SET "userId" = ${user.id} WHERE "userId" = ${existing.id}`
     }
 
     // Create product
