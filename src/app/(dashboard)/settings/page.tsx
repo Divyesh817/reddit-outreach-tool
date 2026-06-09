@@ -56,7 +56,7 @@ export default async function SettingsPage({
         avatarUrl: user?.avatarUrl ?? null,
         plan: user?.plan ?? 'FREE',
         redditUsername: user?.redditUsername ?? null,
-        hasSubscription: !!user?.dodoSubscriptionId,
+        hasSubscription: (user?.plan ?? 'FREE') !== 'FREE',
       }}
       oppsThisMonth={oppsThisMonth}
       repliesThisMonth={repliesThisMonth}

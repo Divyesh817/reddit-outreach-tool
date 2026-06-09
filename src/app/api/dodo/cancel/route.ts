@@ -18,8 +18,13 @@ export async function POST() {
     return NextResponse.json({ error: 'No active subscription' }, { status: 400 })
   }
 
+  // No subscription ID — account was manually upgraded; downgrade immediately
   if (!user.dodoSubscriptionId) {
-    return NextResponse.json({ error: 'No subscription ID on file — contact support.' }, { status: 400 })
+    await prisma.user.update({
+      where: { id: authUser.id },
+      data: { plan: 'FREE' },
+    })
+    return NextResponse.json({ ok: true })
   }
 
   const apiKey = process.env.DODO_API_KEY
@@ -44,7 +49,7 @@ export async function POST() {
   // Mark locally — plan stays active until period end, webhook will downgrade on expiry
   await prisma.user.update({
     where: { id: authUser.id },
-    data: { planExpiresAt: new Date(Date.now() + 32 * 24 * 60 * 60 * 1000) }, // conservative 32 days
+    data: { planExpiresAt: new Date(Date.now() + 32 * 24 * 60 * 60 * 1000) },
   })
 
   return NextResponse.json({ ok: true })
