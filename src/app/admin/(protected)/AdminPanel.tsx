@@ -33,6 +33,7 @@ interface AdminData {
   posted: { total: number }
   payments: {
     totalRevenue: number
+    revenueIsMrr: boolean
     activeSubCount: number
     totalPayments: number
     recentPayments: { id: string; amount: number; currency: string; status: string; email: string; createdAt: string }[]
@@ -387,14 +388,14 @@ function PaymentsTab({ data, loading }: { data: AdminData | null; loading: boole
     )
   }
 
-  const revenue = (p.totalRevenue / 100).toFixed(2)
+  const revenue = p.totalRevenue.toFixed(2)
 
   return (
     <div>
       <div style={{ ...s.statGrid, gridTemplateColumns: 'repeat(3, 1fr)' }}>
         <div style={s.statCard}>
           <div style={s.statNum}>${revenue}</div>
-          <div style={s.statLabel}>Total revenue</div>
+          <div style={s.statLabel}>{p.revenueIsMrr ? 'MRR (est.)' : 'Total revenue'}</div>
         </div>
         <div style={s.statCard}>
           <div style={s.statNum}>{p.activeSubCount}</div>
@@ -437,7 +438,7 @@ function PaymentsTab({ data, loading }: { data: AdminData | null; loading: boole
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 15, fontWeight: 700, color: '#f5f5f5' }}>
-                ${(pay.amount / 100).toFixed(2)} {pay.currency?.toUpperCase()}
+                ${pay.amount.toFixed(2)} {pay.currency?.toUpperCase()}
               </span>
               <span style={{
                 fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
