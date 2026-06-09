@@ -21,49 +21,73 @@ async function getDodoStats() {
       }),
     ])
 
-    const payments = paymentsRes.status === 'fulfilled' && paymentsRes.value.ok
+    const paymentsBody = paymentsRes.status === 'fulfilled' && paymentsRes.value.ok
       ? await paymentsRes.value.json()
-      : { items: [] }
+      : {}
 
-    const subs = subsRes.status === 'fulfilled' && subsRes.value.ok
+    const subsBody = subsRes.status === 'fulfilled' && subsRes.value.ok
       ? await subsRes.value.json()
-      : { items: [] }
+      : {}
 
-    // Filter to Redgrow product IDs only
     const redgrowProductIds = new Set([
       process.env.DODO_STARTER_PRODUCT_ID,
       process.env.DODO_GROWTH_PRODUCT_ID,
     ].filter(Boolean))
 
-    const allPayments: any[] = payments.items ?? []
-    const allSubs: any[] = subs.items ?? []
+    // Dodo may return items at .items or .data
+    const allPayments: any[] = paymentsBody.items ?? paymentsBody.data ?? []
+    const allSubs: any[] = subsBody.items ?? subsBody.data ?? []
+
+    // Payment product_id may be top-level or nested in items array (matches webhook structure)
+    function paymentProductId(p: any): string {
+      return p.product_id ?? p.items?.[0]?.product_id ?? ''
+    }
 
     const paymentList = redgrowProductIds.size > 0
-      ? allPayments.filter((p: any) => redgrowProductIds.has(p.product_id))
+      ? allPayments.filter((p: any) => redgrowProductIds.has(paymentProductId(p)))
       : allPayments
 
     const subList = redgrowProductIds.size > 0
-      ? allSubs.filter((s: any) => redgrowProductIds.has(s.product_id))
+      ? allSubs.filter((s: any) => redgrowProductIds.has(s.product_id ?? ''))
       : allSubs
 
-    const totalRevenue = paymentList
-      .filter((p: any) => p.status === 'succeeded')
-      .reduce((sum: number, p: any) => sum + (p.total_amount ?? 0), 0)
+    // Accept all Dodo success statuses
+    const PAID_STATUSES = new Set(['succeeded', 'paid', 'captured', 'complete', 'completed'])
 
-    const activeSubCount = subList.filter((s: any) => s.status === 'active').length
+    const totalRevenue = paymentList
+      .filter((p: any) => PAID_STATUSES.has((p.status ?? '').toLowerCase()))
+      .reduce((sum: number, p: any) => sum + (p.total_amount ?? p.amount ?? 0), 0)
+
+    const activeSubs = subList.filter((s: any) => s.status === 'active')
+
+    // Build paid customers list from active subscriptions
+    const paidCustomers = activeSubs.map((s: any) => ({
+      email: s.customer?.email ?? s.customer_email ?? '',
+      name:  s.customer?.name  ?? '',
+      plan:  s.product_id === process.env.DODO_STARTER_PRODUCT_ID ? 'STARTER' : 'GROWTH',
+      subscriptionId: s.subscription_id ?? s.id ?? '',
+      createdAt: s.created_at ?? '',
+    })).filter((c: any) => c.email)
 
     const recentPayments = paymentList
       .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 10)
       .map((p: any) => ({
-        id: p.payment_id,
-        amount: p.total_amount,
+        id: p.payment_id ?? p.id,
+        amount: p.total_amount ?? p.amount ?? 0,
         currency: p.currency,
         status: p.status,
+        email: p.customer?.email ?? p.customer_email ?? '',
         createdAt: p.created_at,
       }))
 
-    return { totalRevenue, activeSubCount, recentPayments, totalPayments: paymentList.length }
+    return {
+      totalRevenue,
+      activeSubCount: activeSubs.length,
+      recentPayments,
+      totalPayments: paymentList.length,
+      paidCustomers,
+    }
   } catch {
     return null
   }

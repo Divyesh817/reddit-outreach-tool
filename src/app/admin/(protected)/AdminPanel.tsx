@@ -35,7 +35,8 @@ interface AdminData {
     totalRevenue: number
     activeSubCount: number
     totalPayments: number
-    recentPayments: { id: string; amount: number; currency: string; status: string; createdAt: string }[]
+    recentPayments: { id: string; amount: number; currency: string; status: string; email: string; createdAt: string }[]
+    paidCustomers: { email: string; name: string; plan: string; subscriptionId: string; createdAt: string }[]
   } | null
 }
 
@@ -405,14 +406,34 @@ function PaymentsTab({ data, loading }: { data: AdminData | null; loading: boole
         </div>
       </div>
 
+      {/* Paid customers from Dodo */}
+      <div style={s.card}>
+        <div style={s.label}>Active subscribers (from Dodo)</div>
+        {p.paidCustomers.length === 0 && <div style={{ color: '#555', fontSize: 14 }}>No active subscriptions found</div>}
+        {p.paidCustomers.map(c => (
+          <div key={c.subscriptionId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #1e1e1e' }}>
+            <div>
+              <div style={{ fontSize: 14, color: '#f5f5f5', fontWeight: 500 }}>{c.email}</div>
+              {c.name && <div style={{ fontSize: 12, color: '#666' }}>{c.name}</div>}
+              <div style={{ fontSize: 11, color: '#444', fontFamily: 'monospace', marginTop: 2 }}>{c.subscriptionId}</div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={s.planPill(c.plan)}>{c.plan}</span>
+              {c.createdAt && <span style={{ fontSize: 12, color: '#444' }}>{new Date(c.createdAt).toLocaleDateString()}</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+
       <div style={s.card}>
         <div style={s.label}>Recent payments</div>
         {p.recentPayments.length === 0 && <div style={{ color: '#555', fontSize: 14 }}>No payments yet</div>}
         {p.recentPayments.map(pay => (
           <div key={pay.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #1e1e1e' }}>
             <div>
-              <div style={{ fontSize: 13, color: '#aaa', fontFamily: 'monospace' }}>{pay.id}</div>
-              <div style={{ fontSize: 12, color: '#555' }}>{new Date(pay.createdAt).toLocaleString()}</div>
+              {pay.email && <div style={{ fontSize: 13, color: '#d0d0d0', fontWeight: 500 }}>{pay.email}</div>}
+              <div style={{ fontSize: 12, color: '#555', fontFamily: 'monospace' }}>{pay.id}</div>
+              <div style={{ fontSize: 12, color: '#444' }}>{new Date(pay.createdAt).toLocaleString()}</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 15, fontWeight: 700, color: '#f5f5f5' }}>
@@ -420,8 +441,8 @@ function PaymentsTab({ data, loading }: { data: AdminData | null; loading: boole
               </span>
               <span style={{
                 fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
-                background: pay.status === 'succeeded' ? '#1a2e1a' : '#2a1515',
-                color: pay.status === 'succeeded' ? '#4caf50' : '#ff6b6b',
+                background: ['succeeded','paid','captured'].includes(pay.status) ? '#1a2e1a' : '#2a1515',
+                color: ['succeeded','paid','captured'].includes(pay.status) ? '#4caf50' : '#ff6b6b',
               }}>
                 {pay.status}
               </span>
