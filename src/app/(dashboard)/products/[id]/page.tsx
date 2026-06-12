@@ -3,34 +3,9 @@ import { prisma } from '@/lib/prisma'
 import { notFound } from 'next/navigation'
 import { SubredditList } from '@/components/products/SubredditList'
 import { KeywordsTab } from '@/components/products/KeywordsTab'
+import { ProductProfileEditor } from '@/components/products/ProductProfileEditor'
 import Link from 'next/link'
 import { S } from '@/lib/theme'
-
-
-function Chip({ children, accent }: { children: React.ReactNode; accent?: boolean }) {
-  return (
-    <span style={{
-      fontSize: 14, fontWeight: 600, padding: '3px 9px', borderRadius: 6,
-      background: accent ? S.orangeSoft : S.panel2,
-      border: `1px solid ${accent ? S.orangeLine : S.line2}`,
-      color: accent ? S.orange2 : S.text3,
-    }}>
-      {children}
-    </span>
-  )
-}
-
-function FieldLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p style={{
-      fontSize: 13, fontWeight: 700, color: S.text4, margin: '0 0 6px',
-      textTransform: 'uppercase', letterSpacing: '.06em',
-      fontFamily: 'JetBrains Mono, monospace',
-    }}>
-      {children}
-    </p>
-  )
-}
 
 export default async function ProductDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient()
@@ -85,60 +60,17 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
       </div>
 
       {/* Product profile */}
-      <div style={{ background: S.panel, borderRadius: 14, border: `1px solid ${S.line2}`, overflow: 'hidden', marginBottom: 16 }}>
-        <div style={{ padding: '14px 24px', borderBottom: `1px solid ${S.line}` }}>
-          <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: S.text3, textTransform: 'uppercase', letterSpacing: '.06em', fontFamily: 'JetBrains Mono, monospace' }}>
-            Product Profile
-          </p>
-        </div>
-        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
-
-          {product.description && (
-            <div>
-              <FieldLabel>Description</FieldLabel>
-              <p style={{ fontSize: 16, color: S.text2, margin: 0, lineHeight: 1.6 }}>{product.description}</p>
-            </div>
-          )}
-
-          {product.targetAudience && (
-            <div>
-              <FieldLabel>Target audience</FieldLabel>
-              <p style={{ fontSize: 16, color: S.text2, margin: 0, lineHeight: 1.6 }}>{product.targetAudience}</p>
-            </div>
-          )}
-
-          {product.keyBenefits.length > 0 && (
-            <div>
-              <FieldLabel>Key benefits</FieldLabel>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {product.keyBenefits.map((b, i) => <Chip key={i} accent>{b}</Chip>)}
-              </div>
-            </div>
-          )}
-
-          {product.competitors.length > 0 && (
-            <div>
-              <FieldLabel>Competitors</FieldLabel>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {product.competitors.map((c, i) => <Chip key={i}>{c}</Chip>)}
-              </div>
-            </div>
-          )}
-
-          {product.summary && (
-            <div>
-              <FieldLabel>AI summary</FieldLabel>
-              <p style={{
-                fontSize: 16, color: S.text3, margin: 0, lineHeight: 1.65,
-                background: S.card, borderRadius: 8, padding: '12px 16px',
-                border: `1px solid ${S.line}`,
-              }}>
-                {product.summary}
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
+      <ProductProfileEditor
+        productId={product.id}
+        initial={{
+          name: product.name,
+          description: product.description ?? '',
+          targetAudience: product.targetAudience ?? '',
+          keyBenefits: product.keyBenefits,
+          competitors: product.competitors,
+          summary: product.summary ?? '',
+        }}
+      />
 
       {/* Keywords */}
       <KeywordsTab
