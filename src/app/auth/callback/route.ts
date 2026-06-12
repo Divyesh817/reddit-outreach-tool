@@ -75,6 +75,9 @@ export async function GET(request: NextRequest) {
       } catch { /* non-fatal */ }
     }
 
+    // Password recovery — send straight to reset page, skip onboarding logic
+    if (type === 'recovery') return redirect('/reset-password')
+
     let dest = '/onboarding'
     try {
       const productCount = await prisma.product.count({ where: { userId: user.id } })
