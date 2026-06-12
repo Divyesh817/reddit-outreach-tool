@@ -31,13 +31,12 @@ interface AdminData {
   products: { total: number }
   opportunities: { total: number }
   posted: { total: number }
-  payments: {
-    totalRevenue: number
-    revenueIsMrr: boolean
-    activeSubCount: number
-    totalPayments: number
-    recentPayments: { id: string; amount: number; currency: string; status: string; email: string; createdAt: string }[]
-    paidCustomers: { email: string; name: string; plan: string; subscriptionId: string; createdAt: string }[]
+  billing: {
+    mrr: number
+    starterCount: number
+    growthCount: number
+    newPaidThisMonth: number
+    newPaidLastMonth: number
   } | null
 }
 
@@ -138,7 +137,7 @@ export default function AdminPanel() {
 
       {tab === 'emails' && <EmailsTab />}
       {tab === 'users' && <UsersTab data={data} loading={dataLoading} />}
-      {tab === 'payments' && <PaymentsTab data={data} loading={dataLoading} />}
+      {tab === 'payments' && <BillingTab data={data} loading={dataLoading} />}
       {tab === 'prompts' && <PromptsTab />}
       {tab === 'support' && <SupportTab />}
     </div>
@@ -370,83 +369,58 @@ function UsersTab({ data, loading }: { data: AdminData | null; loading: boolean 
   )
 }
 
-// ─── Payments Tab ─────────────────────────────────────────────────────────────
+// ─── Billing Tab ──────────────────────────────────────────────────────────────
 
-function PaymentsTab({ data, loading }: { data: AdminData | null; loading: boolean }) {
+function BillingTab({ data, loading }: { data: AdminData | null; loading: boolean }) {
   if (loading) return <div style={{ color: '#555', padding: 24 }}>Loading…</div>
   if (!data) return <div style={{ color: '#555', padding: 24 }}>No data</div>
 
-  const p = data.payments
+  const b = data.billing
+  if (!b) return <div style={{ color: '#555', padding: 24 }}>No billing data</div>
 
-  if (!p) {
-    return (
-      <div style={s.card}>
-        <div style={{ color: '#666', fontSize: 14 }}>
-          Dodo Payments data unavailable. Check <code style={{ color: '#aaa' }}>DODO_API_KEY</code> env var.
-        </div>
-      </div>
-    )
-  }
-
-  const revenue = p.totalRevenue.toFixed(2)
+  const totalPaid = b.starterCount + b.growthCount
+  const paidDelta = b.newPaidThisMonth - b.newPaidLastMonth
 
   return (
     <div>
       <div style={{ ...s.statGrid, gridTemplateColumns: 'repeat(3, 1fr)' }}>
         <div style={s.statCard}>
-          <div style={s.statNum}>${revenue}</div>
-          <div style={s.statLabel}>{p.revenueIsMrr ? 'MRR (est.)' : 'Total revenue'}</div>
+          <div style={s.statNum}>${b.mrr}</div>
+          <div style={s.statLabel}>MRR</div>
         </div>
         <div style={s.statCard}>
-          <div style={s.statNum}>{p.activeSubCount}</div>
-          <div style={s.statLabel}>Active subscriptions</div>
+          <div style={s.statNum}>{totalPaid}</div>
+          <div style={s.statLabel}>Paid users</div>
         </div>
         <div style={s.statCard}>
-          <div style={s.statNum}>{p.totalPayments}</div>
-          <div style={s.statLabel}>Total payments</div>
-        </div>
-      </div>
-
-      {/* Paid customers from Dodo */}
-      <div style={s.card}>
-        <div style={s.label}>Active subscribers (from Dodo)</div>
-        {p.paidCustomers.length === 0 && <div style={{ color: '#555', fontSize: 14 }}>No active subscriptions found</div>}
-        {p.paidCustomers.map(c => (
-          <div key={c.subscriptionId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #1e1e1e' }}>
-            <div>
-              <div style={{ fontSize: 14, color: '#f5f5f5', fontWeight: 500 }}>{c.email}</div>
-              {c.name && <div style={{ fontSize: 12, color: '#666' }}>{c.name}</div>}
-              <div style={{ fontSize: 11, color: '#444', fontFamily: 'monospace', marginTop: 2 }}>{c.subscriptionId}</div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={s.planPill(c.plan)}>{c.plan}</span>
-              {c.createdAt && <span style={{ fontSize: 12, color: '#444' }}>{new Date(c.createdAt).toLocaleDateString()}</span>}
-            </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <div style={s.statNum}>{b.newPaidThisMonth}</div>
+            {paidDelta !== 0 && (
+              <span style={{ fontSize: 13, fontWeight: 600, color: paidDelta > 0 ? '#4caf50' : '#ff6b6b' }}>
+                {paidDelta > 0 ? `+${paidDelta}` : paidDelta} vs last mo
+              </span>
+            )}
           </div>
-        ))}
+          <div style={s.statLabel}>New paid this month</div>
+        </div>
       </div>
 
       <div style={s.card}>
-        <div style={s.label}>Recent payments</div>
-        {p.recentPayments.length === 0 && <div style={{ color: '#555', fontSize: 14 }}>No payments yet</div>}
-        {p.recentPayments.map(pay => (
-          <div key={pay.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #1e1e1e' }}>
-            <div>
-              {pay.email && <div style={{ fontSize: 13, color: '#d0d0d0', fontWeight: 500 }}>{pay.email}</div>}
-              <div style={{ fontSize: 12, color: '#555', fontFamily: 'monospace' }}>{pay.id}</div>
-              <div style={{ fontSize: 12, color: '#444' }}>{new Date(pay.createdAt).toLocaleString()}</div>
+        <div style={s.label}>Plan breakdown</div>
+        {[
+          { plan: 'GROWTH',  count: b.growthCount,  price: 19 },
+          { plan: 'STARTER', count: b.starterCount, price: 9  },
+          { plan: 'FREE',    count: (data.users.byPlan['FREE'] ?? 0), price: 0 },
+        ].map(({ plan, count, price }) => (
+          <div key={plan} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid #222' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={s.planPill(plan)}>{plan}</span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: '#f5f5f5' }}>{count} users</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 15, fontWeight: 700, color: '#f5f5f5' }}>
-                ${pay.amount.toFixed(2)} {pay.currency?.toUpperCase()}
-              </span>
-              <span style={{
-                fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
-                background: ['succeeded','paid','captured'].includes(pay.status) ? '#1a2e1a' : '#2a1515',
-                color: ['succeeded','paid','captured'].includes(pay.status) ? '#4caf50' : '#ff6b6b',
-              }}>
-                {pay.status}
-              </span>
+            <div style={{ textAlign: 'right' as const }}>
+              {price > 0
+                ? <span style={{ fontSize: 14, color: '#4caf50', fontWeight: 600 }}>${count * price}/mo</span>
+                : <span style={{ fontSize: 14, color: '#444' }}>—</span>}
             </div>
           </div>
         ))}
