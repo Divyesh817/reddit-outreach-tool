@@ -105,7 +105,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>{children}</Providers>
         <Script
           src="https://datafa.st/js/script.js"
-          data-website-id="dfid_rbYADUGJF4GbJtitXoLrs"
+          data-website-id="dfid_dby0Qjf3wTHvQD5pQFbHo"
           data-domain="redgrow.app"
           strategy="afterInteractive"
         />
