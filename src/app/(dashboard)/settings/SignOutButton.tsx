@@ -4,10 +4,12 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { S } from '@/lib/theme'
+import { useT } from '@/lib/i18n'
 
 export function SignOutButton() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const t = useT()
 
   async function handleSignOut() {
     setLoading(true)
@@ -27,7 +29,7 @@ export function SignOutButton() {
         opacity: loading ? .6 : 1, transition: 'opacity .15s',
       }}
     >
-      {loading ? 'Signing out…' : 'Sign out'}
+      {loading ? t.settings.signingOut : t.settings.signOut}
     </button>
   )
 }

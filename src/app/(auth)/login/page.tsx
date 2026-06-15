@@ -4,6 +4,7 @@ import { useState, Suspense } from 'react'
 import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { useT } from '@/lib/i18n'
 
 export default function LoginPage() {
   return (
@@ -28,6 +29,7 @@ function LoginContent({ isSignup }: { isSignup: boolean }) {
   const [error, setError] = useState('')
   const supabase = createClient()
   const router = useRouter()
+  const tl = useT().login
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '')
 
@@ -52,12 +54,12 @@ function LoginContent({ isSignup }: { isSignup: boolean }) {
 
     if (isSignup) {
       if (password !== confirmPassword) {
-        setError('Passwords do not match.')
+        setError(tl.passwordMismatch)
         setLoading(false)
         return
       }
       if (password.length < 8) {
-        setError('Password must be at least 8 characters.')
+        setError(tl.passwordTooShort)
         setLoading(false)
         return
       }
@@ -98,8 +100,8 @@ function LoginContent({ isSignup }: { isSignup: boolean }) {
       <div style={s.card}>
         <div style={s.cardTop}>
           <span style={s.dotLg}><span style={s.dotLgInner} /></span>
-          <h1 style={s.h1}>{isSignup ? 'Create your free account' : 'Welcome back'}</h1>
-          <p style={s.sub}>{isSignup ? 'Start finding high-intent Reddit leads today.' : 'Sign in to your Redgrow account.'}</p>
+          <h1 style={s.h1}>{isSignup ? tl.createAccount : tl.welcomeBack}</h1>
+          <p style={s.sub}>{isSignup ? tl.signupSub : tl.signinSub}</p>
         </div>
 
             {/* Google */}
@@ -108,13 +110,13 @@ function LoginContent({ isSignup }: { isSignup: boolean }) {
               onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
             >
               <GoogleIcon />
-              Continue with Google
+              {tl.continueWithGoogle}
             </button>
 
             {/* Divider */}
             <div style={s.divRow}>
               <span style={s.divLine} />
-              <span style={s.divText}>or continue with email</span>
+              <span style={s.divText}>{tl.orContinueWithEmail}</span>
               <span style={s.divLine} />
             </div>
 
@@ -123,7 +125,7 @@ function LoginContent({ isSignup }: { isSignup: boolean }) {
               {isSignup && (
                 <input
                   type="text"
-                  placeholder="Your name"
+                  placeholder={tl.namePlaceholder}
                   value={name}
                   onChange={e => setName(e.target.value)}
                   required
@@ -134,7 +136,7 @@ function LoginContent({ isSignup }: { isSignup: boolean }) {
               )}
               <input
                 type="email"
-                placeholder="you@company.com"
+                placeholder={tl.emailPlaceholder}
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 required
@@ -144,7 +146,7 @@ function LoginContent({ isSignup }: { isSignup: boolean }) {
               />
               <input
                 type="password"
-                placeholder="Password"
+                placeholder={tl.passwordPlaceholder}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
@@ -155,7 +157,7 @@ function LoginContent({ isSignup }: { isSignup: boolean }) {
               {isSignup && (
                 <input
                   type="password"
-                  placeholder="Confirm password"
+                  placeholder={tl.confirmPasswordPlaceholder}
                   value={confirmPassword}
                   onChange={e => setConfirmPassword(e.target.value)}
                   required
@@ -166,7 +168,7 @@ function LoginContent({ isSignup }: { isSignup: boolean }) {
               )}
               {!isSignup && (
                 <div style={{ textAlign: 'right', marginTop: -4 }}>
-                  <Link href="/forgot-password" style={s.forgotLink}>Forgot password?</Link>
+                  <Link href="/forgot-password" style={s.forgotLink}>{tl.forgotPassword}</Link>
                 </div>
               )}
               {error && <p style={s.errorText}>{error}</p>}
@@ -177,28 +179,30 @@ function LoginContent({ isSignup }: { isSignup: boolean }) {
                 onMouseEnter={e => { if (!loading && email && password) e.currentTarget.style.background = '#cf3f12' }}
                 onMouseLeave={e => { e.currentTarget.style.background = '#E54B1B' }}
               >
-                {loading ? (isSignup ? 'Creating account…' : 'Signing in…') : (isSignup ? 'Create account →' : 'Sign in →')}
+                {loading
+                  ? (isSignup ? tl.creatingAccount : tl.signingIn)
+                  : (isSignup ? tl.createAccountBtn : tl.signInBtn)}
               </button>
             </form>
 
             <p style={s.switchMode}>
-              {isSignup ? 'Already have an account? ' : "Don't have an account? "}
+              {isSignup ? tl.alreadyHaveAccount : tl.noAccount}
               <Link href={isSignup ? '/login' : '/login?mode=signup'} style={s.switchLink}>
-                {isSignup ? 'Sign in' : 'Sign up free'}
+                {isSignup ? tl.switchToSignIn : tl.switchToSignUp}
               </Link>
             </p>
 
         <p style={s.terms}>
-          By continuing you agree to our{' '}
-          <Link href="/terms" style={s.termsLink}>Terms</Link>
-          {' '}and{' '}
-          <Link href="/privacy" style={s.termsLink}>Privacy Policy</Link>
+          {tl.terms}{' '}
+          <Link href="/terms" style={s.termsLink}>{tl.termsLink}</Link>
+          {' '}und{' '}
+          <Link href="/privacy" style={s.termsLink}>{tl.privacyLink}</Link>
         </p>
       </div>
 
       {/* Trust row */}
       <div style={s.trust}>
-        {['No credit card required', 'Cancel anytime', 'Plans from $9/mo'].map(t => (
+        {tl.trust.map(t => (
           <span key={t} style={s.trustPill}>{t}</span>
         ))}
       </div>

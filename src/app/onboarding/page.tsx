@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, KeyboardEvent } from 'react'
+import { useT } from '@/lib/i18n'
 import './onboarding.css'
 
 type Step = '1' | '1b' | '2' | '3' | '4' | '4b'
@@ -29,6 +30,9 @@ interface DiscoveredSub {
 }
 
 export default function OnboardingPage() {
+  const t = useT()
+  const to = t.onboarding
+
   const [step, setStep] = useState<Step>('1')
   const [url, setUrl] = useState('')
   const [urlError, setUrlError] = useState(false)
@@ -62,7 +66,6 @@ export default function OnboardingPage() {
     setStep('1b')
     setChecks({ website: 'active', profile: 'pending', subreddits: 'pending', keywords: 'pending' })
 
-    // 1. Fetch URL HTML (non-fatal — AI can work from URL alone if site blocks scraping)
     let html = ''
     try {
       const r = await fetch('/api/products/fetch-url', {
@@ -79,7 +82,6 @@ export default function OnboardingPage() {
     await delay(200)
     setCheck('profile', 'active')
 
-    // 2. Analyze: profile + subreddits + keywords in one Claude call
     let fetchedProfile: ProductProfile | null = null
     let fetchedSubs: DiscoveredSub[] = []
     let fetchedKeywords: string[] = []
@@ -115,7 +117,6 @@ export default function OnboardingPage() {
     setDiscoveredSubs(cleanSubs)
     setSelectedSubs(new Set(cleanSubs.map((s: any) => s.name)))
     setSuggestedKeywords(fetchedKeywords)
-    // Pre-populate first 6 as default selected keywords
     setKeywords(fetchedKeywords.slice(0, 6))
     setStep('2')
   }
@@ -161,7 +162,6 @@ export default function OnboardingPage() {
         const body = await r.json().catch(() => ({}))
         throw new Error(body.error || `Error ${r.status}`)
       }
-      // Product saved — now run the initial scan to find leads
       setCreating(false)
       setStep('4b')
       runInitialScan()
@@ -173,7 +173,6 @@ export default function OnboardingPage() {
 
   async function runInitialScan() {
     try {
-      // Step 1: get subreddits to scan
       const prepRes = await fetch('/api/scan', { method: 'POST' })
       const prep = await prepRes.json().catch(() => ({}))
       const subreddits: { subredditId: string; subredditName: string; productId: string }[] = prep.subreddits ?? []
@@ -183,7 +182,6 @@ export default function OnboardingPage() {
         return
       }
 
-      // Step 2: fetch Reddit threads sequentially — parallel bursts trigger Reddit rate limits
       const limit = prep.fetchLimit ?? 15
       const subredditsData: { subredditId: string; productId: string; threads: any[] }[] = []
       for (const { subredditId, subredditName, productId } of subreddits) {
@@ -192,7 +190,6 @@ export default function OnboardingPage() {
         subredditsData.push({ subredditId, productId, threads: data.threads ?? [] })
       }
 
-      // Step 3: score threads + create opportunities
       const processRes = await fetch('/api/scan/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -200,9 +197,8 @@ export default function OnboardingPage() {
       })
       const result = await processRes.json().catch(() => ({}))
       setScanLeadsFound(result.totalCreated ?? 0)
-    } catch { /* non-fatal — user lands on inbox anyway */ }
+    } catch { /* non-fatal */ }
 
-    // Brief pause to show result count, then redirect to inbox
     scanTimerRef.current = setTimeout(() => {
       window.location.href = '/opportunities'
     }, 2000)
@@ -213,12 +209,7 @@ export default function OnboardingPage() {
   }, [])
 
   const stepNum = step === '1' || step === '1b' ? 1 : step === '2' ? 2 : step === '3' ? 3 : 4
-  const STEPS = [
-    { n: 1, label: 'Your product' },
-    { n: 2, label: 'Subreddits' },
-    { n: 3, label: 'Keywords' },
-    { n: 4, label: 'Ready' },
-  ]
+  const STEPS = to.steps.map((label, i) => ({ n: i + 1, label }))
 
   return (
     <div className="ob-root">
@@ -228,8 +219,8 @@ export default function OnboardingPage() {
           <span>Redgrow</span>
         </a>
         <div className="ob-top-right">
-          <a href="/dashboard">Back to dashboard</a>
-          <a href="#" onClick={async e => { e.preventDefault(); const { createClient } = await import('@/lib/supabase/client'); await createClient().auth.signOut(); window.location.href = '/' }}>Sign out</a>
+          <a href="/dashboard">{to.backToDashboard}</a>
+          <a href="#" onClick={async e => { e.preventDefault(); const { createClient } = await import('@/lib/supabase/client'); await createClient().auth.signOut(); window.location.href = '/' }}>{to.signOut}</a>
         </div>
       </header>
 
@@ -255,11 +246,11 @@ export default function OnboardingPage() {
             <div className="ob-left">
               {step === '1' && (
                 <>
-                  <div className="ob-eyebrow">Step 01 / 04 <span className="ob-eyebrow-dim">· About 2 minutes</span></div>
-                  <h1 className="ob-title">Tell us about <em>your product.</em></h1>
-                  <p className="ob-lead">We'll analyze your website and surface the Reddit communities where your buyers already hang out.</p>
+                  <div className="ob-eyebrow">{to.step1.eyebrowPrefix} <span className="ob-eyebrow-dim">{to.step1.eyebrowHint}</span></div>
+                  <h1 className="ob-title">{to.step1.titleLine1} <em>{to.step1.titleEm}</em></h1>
+                  <p className="ob-lead">{to.step1.lead}</p>
                   <div className="ob-field">
-                    <label className="ob-field-label">Company website</label>
+                    <label className="ob-field-label">{to.step1.label}</label>
                     <div className={`ob-input-row${urlError ? ' error' : ''}`}>
                       <span className="ob-input-ic">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -278,13 +269,13 @@ export default function OnboardingPage() {
                       />
                     </div>
                     {urlError
-                      ? <p className="ob-helper error">Please enter a valid URL</p>
-                      : <p className="ob-helper">We never post anything without your approval.</p>}
+                      ? <p className="ob-helper error">{to.step1.urlError}</p>
+                      : <p className="ob-helper">{to.step1.helper}</p>}
                   </div>
                   <div className="ob-actions">
-                    <span className="ob-save-indicator"><span className="ob-save-dot" />Progress saved</span>
+                    <span className="ob-save-indicator"><span className="ob-save-dot" />{to.step1.progressSaved}</span>
                     <button className="ob-btn ob-btn-primary" onClick={handleAnalyze} disabled={url.trim().length < 4}>
-                      Continue <span className="ob-arr">→</span>
+                      {to.step1.continueBtn} <span className="ob-arr">→</span>
                     </button>
                   </div>
                 </>
@@ -292,11 +283,11 @@ export default function OnboardingPage() {
 
               {step === '1b' && (
                 <>
-                  <div className="ob-eyebrow">Step 01 / 04 <span className="ob-eyebrow-dim">· Analyzing</span></div>
-                  <h1 className="ob-title">Tell us about <em>your product.</em></h1>
-                  <p className="ob-lead">Hold tight — we're reading your site, identifying your positioning, and matching it to the right subreddits.</p>
+                  <div className="ob-eyebrow">{to.step1.eyebrowPrefix} <span className="ob-eyebrow-dim">{to.step1b.eyebrowHint}</span></div>
+                  <h1 className="ob-title">{to.step1.titleLine1} <em>{to.step1.titleEm}</em></h1>
+                  <p className="ob-lead">{to.step1b.lead}</p>
                   <div className="ob-field">
-                    <label className="ob-field-label">Company website</label>
+                    <label className="ob-field-label">{to.step1.label}</label>
                     <div className="ob-input-row" style={{ opacity: .7 }}>
                       <span className="ob-input-ic">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -308,35 +299,34 @@ export default function OnboardingPage() {
                     </div>
                     {analyzeError
                       ? <p className="ob-helper error">{analyzeError}</p>
-                      : <div className="ob-helper-analyzing"><span className="ob-dot-pulse" /> Analyzing your website…</div>}
+                      : <div className="ob-helper-analyzing"><span className="ob-dot-pulse" /> {to.step1b.analyzing}</div>}
                   </div>
                   <div className="ob-actions">
-                    <span className="ob-save-indicator"><span className="ob-save-dot" />This usually takes 10–20 seconds</span>
-                    <button className="ob-btn ob-btn-primary" disabled>Analyzing… <span className="ob-arr">→</span></button>
+                    <span className="ob-save-indicator"><span className="ob-save-dot" />{to.step1b.takesTime}</span>
+                    <button className="ob-btn ob-btn-primary" disabled>{to.step1b.analyzingBtn} <span className="ob-arr">→</span></button>
                   </div>
                 </>
               )}
 
               {step === '2' && (
                 <>
-                  <div className="ob-eyebrow">Step 02 / 04 <span className="ob-eyebrow-dim">· Review communities</span></div>
-                  <h1 className="ob-title">Where your buyers <em>actually hang out.</em></h1>
+                  <div className="ob-eyebrow">{to.step2.eyebrowPrefix} <span className="ob-eyebrow-dim">{to.step2.eyebrowHint}</span></div>
+                  <h1 className="ob-title">{to.step2.titleLine1} <em>{to.step2.titleEm}</em></h1>
                   <p className="ob-lead">
-                    We found <b style={{ color: '#F4ECDE' }}>{discoveredSubs.length} high-fit subreddits</b> for{' '}
-                    <b style={{ color: '#F4ECDE' }}>{profile?.name || 'your product'}</b>. Toggle off any you'd rather skip — you can change this later.
+                    {to.step2.lead(discoveredSubs.length, profile?.name || 'your product')}
                   </p>
                   <div className="ob-field">
-                    <label className="ob-field-label">Filter</label>
+                    <label className="ob-field-label">{to.step2.filterLabel}</label>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
-                      <span className="ob-filter-chip active">All <span className="ob-filter-count">{discoveredSubs.length}</span></span>
-                      <span className="ob-filter-chip">High fit <span className="ob-filter-count">{discoveredSubs.filter(s => s.fitScore >= 80).length}</span></span>
-                      <span className="ob-filter-chip">Niche <span className="ob-filter-count">{discoveredSubs.filter(s => s.fitScore < 80).length}</span></span>
+                      <span className="ob-filter-chip active">{to.step2.filterAll} <span className="ob-filter-count">{discoveredSubs.length}</span></span>
+                      <span className="ob-filter-chip">{to.step2.filterHighFit} <span className="ob-filter-count">{discoveredSubs.filter(s => s.fitScore >= 80).length}</span></span>
+                      <span className="ob-filter-chip">{to.step2.filterNiche} <span className="ob-filter-count">{discoveredSubs.filter(s => s.fitScore < 80).length}</span></span>
                     </div>
                   </div>
                   <div className="ob-actions">
-                    <button className="ob-btn ob-btn-ghost" onClick={() => setStep('1')}>← Back</button>
+                    <button className="ob-btn ob-btn-ghost" onClick={() => setStep('1')}>{to.step2.back}</button>
                     <button className="ob-btn ob-btn-primary" onClick={() => setStep('3')}>
-                      <b>{selectedSubs.size} selected</b> · Continue <span className="ob-arr">→</span>
+                      {to.step2.selectedContinue(selectedSubs.size)} <span className="ob-arr">→</span>
                     </button>
                   </div>
                 </>
@@ -344,12 +334,12 @@ export default function OnboardingPage() {
 
               {step === '3' && (
                 <>
-                  <div className="ob-eyebrow">Step 03 / 04 <span className="ob-eyebrow-dim">· What to watch for</span></div>
-                  <h1 className="ob-title">The phrases <em>buyers use.</em></h1>
-                  <p className="ob-lead">Redgrow flags threads where buyers use any of these phrases. Start with our suggestions — add your own anytime.</p>
+                  <div className="ob-eyebrow">{to.step3.eyebrowPrefix} <span className="ob-eyebrow-dim">{to.step3.eyebrowHint}</span></div>
+                  <h1 className="ob-title">{to.step3.titleLine1} <em>{to.step3.titleEm}</em></h1>
+                  <p className="ob-lead">{to.step3.lead}</p>
                   <div className="ob-field">
                     <label className="ob-field-label">
-                      Tracked keywords <span style={{ color: '#8B8175', fontWeight: 500, letterSpacing: '.04em' }}>· {keywords.length} of 30</span>
+                      {to.step3.label} <span style={{ color: '#8B8175', fontWeight: 500, letterSpacing: '.04em' }}>· {keywords.length} {to.step3.of30}</span>
                     </label>
                     <div className="ob-kw-input">
                       {keywords.map(kw => (
@@ -360,17 +350,17 @@ export default function OnboardingPage() {
                       ))}
                       <input
                         className="ob-kw-text-input"
-                        placeholder="Type a phrase and press enter…"
+                        placeholder={to.step3.placeholder}
                         value={kwInput}
                         onChange={e => setKwInput(e.target.value)}
                         onKeyDown={handleKwKeyDown}
                       />
                     </div>
-                    <p className="ob-helper">Tip: phrases work better than single words.</p>
+                    <p className="ob-helper">{to.step3.helper}</p>
                   </div>
                   <div className="ob-actions">
-                    <button className="ob-btn ob-btn-ghost" onClick={() => setStep('2')}>← Back</button>
-                    <button className="ob-btn ob-btn-primary" onClick={() => setStep('4')}>Continue <span className="ob-arr">→</span></button>
+                    <button className="ob-btn ob-btn-ghost" onClick={() => setStep('2')}>{to.step3.back}</button>
+                    <button className="ob-btn ob-btn-primary" onClick={() => setStep('4')}>{to.step3.continueBtn} <span className="ob-arr">→</span></button>
                   </div>
                 </>
               )}
@@ -378,21 +368,16 @@ export default function OnboardingPage() {
               {step === '4' && (
                 <>
                   <div className="ob-eyebrow" style={{ color: '#3FB07A' }}>
-                    Step 04 / 04 <span className="ob-eyebrow-dim" style={{ color: '#8B8175' }}>· You're all set</span>
+                    {to.step4.eyebrowPrefix} <span className="ob-eyebrow-dim" style={{ color: '#8B8175' }}>{to.step4.eyebrowHint}</span>
                   </div>
-                  <h1 className="ob-title">You're ready to <em>grow.</em></h1>
+                  <h1 className="ob-title">{to.step4.titleLine1} <em>{to.step4.titleEm}</em></h1>
                   <p className="ob-lead">
-                    Redgrow is now watching <b style={{ color: '#F4ECDE' }}>{selectedSubs.size} subreddits</b> for{' '}
-                    <b style={{ color: '#F4ECDE' }}>{keywords.length} keywords</b>. Your first matches are already coming in.
+                    {to.step4.lead(selectedSubs.size, keywords.length)}
                   </p>
                   <div className="ob-field">
-                    <label className="ob-field-label">What happens next</label>
+                    <label className="ob-field-label">{to.step4.nextLabel}</label>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
-                      {[
-                        'We scan new threads every 30 minutes.',
-                        'You\'ll see high-intent threads in your inbox.',
-                        'One click drafts an on-brand AI reply.',
-                      ].map((text, i) => (
+                      {to.step4.nextItems.map((text, i) => (
                         <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 13.5, color: '#C9BFAE' }}>
                           <span className="ob-next-num">{i + 1}</span>
                           {text}
@@ -406,11 +391,11 @@ export default function OnboardingPage() {
                     </p>
                   )}
                   <div className="ob-actions">
-                    <button className="ob-btn ob-btn-ghost" onClick={() => setStep('3')}>← Back</button>
+                    <button className="ob-btn ob-btn-ghost" onClick={() => setStep('3')}>{to.step4.back}</button>
                     <button className="ob-btn ob-btn-primary" onClick={handleComplete} disabled={creating}>
                       {creating
-                        ? <><span className="ob-inline-spinner" /> Saving…</>
-                        : <>Find my leads <span className="ob-arr">→</span></>}
+                        ? <><span className="ob-inline-spinner" /> {to.step4.saving}</>
+                        : <>{to.step4.findLeads} <span className="ob-arr">→</span></>}
                     </button>
                   </div>
                 </>
@@ -419,46 +404,41 @@ export default function OnboardingPage() {
               {step === '4b' && (
                 <>
                   <div className="ob-eyebrow" style={{ color: '#3FB07A' }}>
-                    Scanning now <span className="ob-eyebrow-dim" style={{ color: '#8B8175' }}>· Almost there</span>
+                    {to.step4b.eyebrow} <span className="ob-eyebrow-dim" style={{ color: '#8B8175' }}>{to.step4b.eyebrowHint}</span>
                   </div>
-                  <h1 className="ob-title">Hunting for <em>warm leads.</em></h1>
-                  <p className="ob-lead">
-                    Claude is scanning Reddit right now — reading posts and comment threads in your subreddits, scoring intent, and drafting replies for the best matches.
-                  </p>
+                  <h1 className="ob-title">{to.step4b.titleLine1} <em>{to.step4b.titleEm}</em></h1>
+                  <p className="ob-lead">{to.step4b.lead}</p>
                   <div className="ob-field">
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
-                      {[
-                        { label: 'Fetching recent posts & comment threads', done: true },
-                        { label: 'Scoring intent with Claude AI', done: scanLeadsFound > 0 },
-                        { label: 'Drafting replies for high-intent threads', done: scanLeadsFound > 0 },
-                      ].map((item, i) => (
-                        <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 13.5, color: item.done ? '#C9BFAE' : '#5E544A' }}>
-                          <span style={{
-                            width: 20, height: 20, borderRadius: '50%', display: 'inline-flex',
-                            alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                            background: item.done ? 'rgba(63,176,122,.15)' : 'rgba(255,255,255,.04)',
-                            border: `1px solid ${item.done ? 'rgba(63,176,122,.4)' : 'rgba(255,255,255,.08)'}`,
-                            fontSize: 10,
-                          }}>
-                            {item.done ? <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#3FB07A" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg> : <span className="ob-dot-pulse" style={{ width: 6, height: 6 }} />}
-                          </span>
-                          {item.label}
-                        </div>
-                      ))}
+                      {to.step4b.scanItems.map((label, i) => {
+                        const done = i === 0 ? true : scanLeadsFound > 0
+                        return (
+                          <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 13.5, color: done ? '#C9BFAE' : '#5E544A' }}>
+                            <span style={{
+                              width: 20, height: 20, borderRadius: '50%', display: 'inline-flex',
+                              alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                              background: done ? 'rgba(63,176,122,.15)' : 'rgba(255,255,255,.04)',
+                              border: `1px solid ${done ? 'rgba(63,176,122,.4)' : 'rgba(255,255,255,.08)'}`,
+                              fontSize: 10,
+                            }}>
+                              {done ? <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#3FB07A" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg> : <span className="ob-dot-pulse" style={{ width: 6, height: 6 }} />}
+                            </span>
+                            {label}
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                   <div style={{ marginTop: 20, padding: '14px 18px', borderRadius: 10, background: 'rgba(63,176,122,.08)', border: '1px solid rgba(63,176,122,.2)', display: 'flex', alignItems: 'center', gap: 12 }}>
                     <span className="ob-dot-pulse" style={{ flexShrink: 0 }} />
                     <span style={{ fontSize: 13.5, color: '#3FB07A', fontWeight: 600 }}>
-                      {scanLeadsFound > 0
-                        ? `Found ${scanLeadsFound} lead${scanLeadsFound !== 1 ? 's' : ''} — opening your inbox…`
-                        : 'Scanning your subreddits for fresh intent signals…'}
+                      {scanLeadsFound > 0 ? to.step4b.leadsFound(scanLeadsFound) : to.step4b.scanning}
                     </span>
                   </div>
                   <div className="ob-actions" style={{ marginTop: 24 }}>
-                    <span style={{ fontSize: 13, color: '#5E544A' }}>Taking you to your inbox automatically</span>
+                    <span style={{ fontSize: 13, color: '#5E544A' }}>{to.step4b.autoRedirect}</span>
                     <button className="ob-btn ob-btn-primary" onClick={() => { window.location.href = '/opportunities' }}>
-                      Go now <span className="ob-arr">→</span>
+                      {to.step4b.goNow} <span className="ob-arr">→</span>
                     </button>
                   </div>
                 </>
@@ -533,38 +513,41 @@ function OrbitGraphic() {
 // ─── Checklist panel (Step 1b right panel) ────────────────────────────────────
 
 function ChecklistPanel({ checks, url }: { checks: { website: CheckState; profile: CheckState; subreddits: CheckState; keywords: CheckState }; url: string }) {
+  const to = useT().onboarding
+  const cl = to.checklist
+
   const items = [
     {
       key: 'website' as const,
       icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>,
-      title: 'Analyzing your website',
-      activeSub: `Reading ${url}…`,
-      doneSub: `Scraped and extracted content from ${url}`,
-      pendingSub: 'Up next',
+      title: cl.website.title,
+      activeSub: cl.website.active(url),
+      doneSub: cl.website.done(url),
+      pendingSub: cl.website.pending,
     },
     {
       key: 'profile' as const,
       icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
-      title: 'Building product profile',
-      activeSub: 'Identifying positioning, audience, and competitor signals…',
-      doneSub: 'Product profile generated successfully.',
-      pendingSub: 'Up next — extracting name, audience and key benefits.',
+      title: cl.profile.title,
+      activeSub: cl.profile.active,
+      doneSub: cl.profile.done,
+      pendingSub: cl.profile.pending,
     },
     {
       key: 'subreddits' as const,
       icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>,
-      title: 'Discovering subreddits',
-      activeSub: 'Cross-referencing communities for audience fit…',
-      doneSub: 'Communities found and ranked by fit score.',
-      pendingSub: 'Up next — cross-referencing 12,000+ communities.',
+      title: cl.subreddits.title,
+      activeSub: cl.subreddits.active,
+      doneSub: cl.subreddits.done,
+      pendingSub: cl.subreddits.pending,
     },
     {
       key: 'keywords' as const,
       icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>,
-      title: 'Drafting starter keywords',
-      activeSub: 'Generating intent phrases for your buyers…',
-      doneSub: 'Keyword suggestions ready.',
-      pendingSub: 'Up next — we\'ll suggest 8–12 to start with.',
+      title: cl.keywords.title,
+      activeSub: cl.keywords.active,
+      doneSub: cl.keywords.done,
+      pendingSub: cl.keywords.pending,
     },
   ]
 
@@ -587,7 +570,7 @@ function ChecklistPanel({ checks, url }: { checks: { website: CheckState; profil
               </div>
             </div>
             <div className="ob-check-time">
-              {state === 'done' ? 'done' : state === 'active' ? '…' : 'queued'}
+              {state === 'done' ? cl.stateLabels.done : state === 'active' ? '…' : cl.stateLabels.queued}
             </div>
           </div>
         )
@@ -603,13 +586,14 @@ function SubredditPanel({ subs, selected, onToggle }: {
   selected: Set<string>
   onToggle: (name: string) => void
 }) {
+  const to = useT().onboarding
+  const sp = to.subredditPanel
+
   return (
     <div className="ob-sr-preview">
       <div className="ob-preview-head">
-        <span className="ob-preview-lbl">Discovered subreddits</span>
-        <span className="ob-preview-count">
-          <b>{selected.size}</b><span className="of"> / {subs.length} selected</span>
-        </span>
+        <span className="ob-preview-lbl">{sp.header}</span>
+        <span className="ob-preview-count">{sp.selected(selected.size, subs.length)}</span>
       </div>
       <div className="ob-sr-list">
         {subs.map(sub => {
@@ -619,7 +603,7 @@ function SubredditPanel({ subs, selected, onToggle }: {
               <span className="ob-sr-mark">r</span>
               <div className="ob-sr-info">
                 <div className="ob-sr-name">r/{sub.name}</div>
-                <div className="ob-sr-score"><b>{sub.fitScore}%</b> fit</div>
+                <div className="ob-sr-score"><b>{sub.fitScore}%</b> {sp.fitLabel}</div>
               </div>
               <div className="ob-fit-bar" style={{ '--fit': `${sub.fitScore}%` } as React.CSSProperties} />
               <button className={`ob-toggle${on ? ' on' : ''}`} onClick={() => onToggle(sub.name)} aria-label={`Toggle r/${sub.name}`} />
@@ -638,10 +622,13 @@ function KeywordPanel({ suggestions, currentKeywords, onAdd }: {
   currentKeywords: string[]
   onAdd: (kw: string) => void
 }) {
+  const to = useT().onboarding
+  const kp = to.keywordPanel
   const available = suggestions.filter(s => !currentKeywords.includes(s))
+
   return (
     <div>
-      <div className="ob-sug-head"><span className="ob-sug-spark">✦</span> AI-suggested for your product</div>
+      <div className="ob-sug-head"><span className="ob-sug-spark">✦</span> {kp.aiSuggested}</div>
       <div className="ob-kw-grid">
         {available.slice(0, 12).map(kw => (
           <span key={kw} className="ob-kw-sug" onClick={() => onAdd(kw)}>
@@ -649,16 +636,16 @@ function KeywordPanel({ suggestions, currentKeywords, onAdd }: {
           </span>
         ))}
         {available.length === 0 && (
-          <span style={{ fontSize: 12.5, color: '#5E544A', fontFamily: 'JetBrains Mono, monospace' }}>All suggestions added.</span>
+          <span style={{ fontSize: 12.5, color: '#5E544A', fontFamily: 'JetBrains Mono, monospace' }}>{kp.allAdded}</span>
         )}
       </div>
 
-      <div className="ob-sug-head" style={{ marginTop: 18 }}><span className="ob-sug-spark">⚡</span> Pain signals · auto-tagged</div>
+      <div className="ob-sug-head" style={{ marginTop: 18 }}><span className="ob-sug-spark">⚡</span> {kp.painSignals}</div>
       <div className="ob-kw-grid">
-        <span className="ob-kw-sug" style={{ borderColor: 'rgba(226,85,85,.25)', color: '#FF8A8A', pointerEvents: 'none' }}><span className="ob-kw-plus" style={{ color: '#FF8A8A' }}>●</span>Competitor pain</span>
-        <span className="ob-kw-sug" style={{ borderColor: 'rgba(255,87,34,.28)', color: '#FF7849', pointerEvents: 'none' }}><span className="ob-kw-plus" style={{ color: '#FF7849' }}>●</span>Switching intent</span>
-        <span className="ob-kw-sug" style={{ borderColor: 'rgba(91,141,239,.25)', color: '#9DB3FF', pointerEvents: 'none' }}><span className="ob-kw-plus" style={{ color: '#9DB3FF' }}>●</span>Tool search</span>
-        <span className="ob-kw-sug" style={{ borderColor: 'rgba(63,176,122,.2)', color: '#3FB07A', pointerEvents: 'none' }}><span className="ob-kw-plus" style={{ color: '#3FB07A' }}>●</span>High-fit ICP</span>
+        <span className="ob-kw-sug" style={{ borderColor: 'rgba(226,85,85,.25)', color: '#FF8A8A', pointerEvents: 'none' }}><span className="ob-kw-plus" style={{ color: '#FF8A8A' }}>●</span>{kp.competitorPain}</span>
+        <span className="ob-kw-sug" style={{ borderColor: 'rgba(255,87,34,.28)', color: '#FF7849', pointerEvents: 'none' }}><span className="ob-kw-plus" style={{ color: '#FF7849' }}>●</span>{kp.switchingIntent}</span>
+        <span className="ob-kw-sug" style={{ borderColor: 'rgba(91,141,239,.25)', color: '#9DB3FF', pointerEvents: 'none' }}><span className="ob-kw-plus" style={{ color: '#9DB3FF' }}>●</span>{kp.toolSearch}</span>
+        <span className="ob-kw-sug" style={{ borderColor: 'rgba(63,176,122,.2)', color: '#3FB07A', pointerEvents: 'none' }}><span className="ob-kw-plus" style={{ color: '#3FB07A' }}>●</span>{kp.highFitICP}</span>
       </div>
 
       <div className="ob-alert-row">
@@ -669,8 +656,8 @@ function KeywordPanel({ suggestions, currentKeywords, onAdd }: {
           </svg>
         </div>
         <div>
-          <div className="ob-alert-title">Real-time alerts</div>
-          <div className="ob-alert-sub">We'll surface threads scoring ≥ 80% intent. Manage in Settings.</div>
+          <div className="ob-alert-title">{kp.alertTitle}</div>
+          <div className="ob-alert-sub">{kp.alertSub}</div>
         </div>
       </div>
     </div>
@@ -680,11 +667,14 @@ function KeywordPanel({ suggestions, currentKeywords, onAdd }: {
 // ─── Ready panel (Step 4 right panel) ────────────────────────────────────────
 
 function ReadyPanel({ selectedCount, kwCount, productName, scanning = false, leadsFound = 0 }: { selectedCount: number; kwCount: number; productName?: string; scanning?: boolean; leadsFound?: number }) {
+  const to = useT().onboarding
+  const rp = to.readyPanel
+
   return (
     <div>
       <div className="ob-ready-head">
-        <span className="ob-ready-lbl">First match · <span style={{ color: scanning ? '#3FB07A' : '#FF7849' }}>{scanning ? 'live scan running' : 'scanning now'}</span></span>
-        <span className="ob-live-badge"><span className="ob-live-dot" />Live</span>
+        <span className="ob-ready-lbl">{rp.firstMatch} <span style={{ color: scanning ? '#3FB07A' : '#FF7849' }}>{scanning ? rp.liveScanRunning : rp.scanningNow}</span></span>
+        <span className="ob-live-badge"><span className="ob-live-dot" />{rp.live}</span>
       </div>
       <div className="ob-preview-thread">
         <span className="ob-thread-mark">r</span>
@@ -696,8 +686,8 @@ function ReadyPanel({ selectedCount, kwCount, productName, scanning = false, lea
             Anyone know a good alternative to [Competitor] for this? Looking for something that doesn't cost a fortune.
           </div>
           <div className="ob-thread-tags">
-            <span className="ob-pain-tag">Switching intent</span>
-            <span className="ob-pain-tag blue">Tool search</span>
+            <span className="ob-pain-tag">{to.keywordPanel.switchingIntent}</span>
+            <span className="ob-pain-tag blue">{to.keywordPanel.toolSearch}</span>
           </div>
         </div>
         <span className="ob-intent-pill">91%</span>
@@ -705,19 +695,19 @@ function ReadyPanel({ selectedCount, kwCount, productName, scanning = false, lea
 
       <div className="ob-summary-grid">
         <div className="ob-sum">
-          <div className="ob-sum-lbl">Subreddits</div>
+          <div className="ob-sum-lbl">{rp.subredditsLabel}</div>
           <div className="ob-sum-val">{selectedCount}</div>
-          <div className="ob-sum-delta">Watching</div>
+          <div className="ob-sum-delta">{rp.watching}</div>
         </div>
         <div className="ob-sum">
-          <div className="ob-sum-lbl">Keywords</div>
+          <div className="ob-sum-lbl">{rp.keywordsLabel}</div>
           <div className="ob-sum-val">{kwCount}</div>
-          <div className="ob-sum-delta">Tracked</div>
+          <div className="ob-sum-delta">{rp.tracked}</div>
         </div>
         <div className="ob-sum">
-          <div className="ob-sum-lbl">{scanning ? 'Leads found' : 'Intent'}</div>
+          <div className="ob-sum-lbl">{scanning ? rp.leadsFoundLabel : rp.intentLabel}</div>
           <div className="ob-sum-val">{scanning ? leadsFound : <>91<span style={{ fontSize: 14, color: '#8B8175', fontWeight: 500 }}>%</span></>}</div>
-          <div className="ob-sum-delta">{scanning ? 'So far' : 'First match'}</div>
+          <div className="ob-sum-delta">{scanning ? rp.soFar : rp.firstMatchLabel}</div>
         </div>
       </div>
 
@@ -728,11 +718,9 @@ function ReadyPanel({ selectedCount, kwCount, productName, scanning = false, lea
             : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><polyline points="20 6 9 17 4 12"/></svg>}
         </div>
         <div>
-          <div className="ob-ready-title">{scanning ? 'Scan in progress' : 'Workspace is live'}</div>
+          <div className="ob-ready-title">{scanning ? rp.scanInProgress : rp.workspaceLive}</div>
           <div className="ob-ready-sub">
-            {scanning
-              ? `Claude is reading Reddit threads and scoring intent${productName ? ` for ${productName}` : ''}…`
-              : `Open the dashboard to see your first AI-drafted reply${productName ? ` for ${productName}` : ''}.`}
+            {scanning ? rp.scanningText(productName) : rp.liveText(productName)}
           </div>
         </div>
       </div>

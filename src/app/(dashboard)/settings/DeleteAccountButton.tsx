@@ -3,10 +3,13 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { S } from '@/lib/theme'
+import { useT } from '@/lib/i18n'
 
 export function DeleteAccountButton() {
   const [phase, setPhase] = useState<'idle' | 'confirm' | 'deleting'>('idle')
   const [error, setError] = useState('')
+  const t = useT()
+  const td = t.settings.danger
 
   async function handleDelete() {
     setPhase('deleting')
@@ -37,7 +40,7 @@ export function DeleteAccountButton() {
         onMouseEnter={e => (e.currentTarget.style.background = 'rgba(229,83,83,.08)')}
         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
       >
-        Delete account
+        {td.deleteAccount}
       </button>
     )
   }
@@ -48,7 +51,7 @@ export function DeleteAccountButton() {
       borderRadius: 10, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12,
     }}>
       <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: S.red }}>
-        Are you sure? This permanently deletes your account, all products, and all data. This cannot be undone.
+        {td.deleteConfirm}
       </p>
       {error && (
         <p style={{ margin: 0, fontSize: 13, color: S.red, fontWeight: 500 }}>⚠ {error}</p>
@@ -63,7 +66,7 @@ export function DeleteAccountButton() {
             opacity: phase === 'deleting' ? .6 : 1,
           }}
         >
-          {phase === 'deleting' ? 'Deleting…' : 'Yes, delete everything'}
+          {phase === 'deleting' ? td.deleting : td.deleteConfirmBtn}
         </button>
         <button
           onClick={() => { setPhase('idle'); setError('') }}
@@ -74,7 +77,7 @@ export function DeleteAccountButton() {
             cursor: 'pointer',
           }}
         >
-          Cancel
+          {t.settings.account.cancel}
         </button>
       </div>
     </div>

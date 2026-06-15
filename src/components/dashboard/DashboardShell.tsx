@@ -8,6 +8,7 @@ import { S, DARK_VARS, LIGHT_VARS } from '@/lib/theme'
 import { PLAN_LIMITS } from '@/types'
 import { SupportWidget } from '@/components/support/SupportWidget'
 import { ProductLogo } from '@/components/ui/ProductLogo'
+import { useLanguage, useT } from '@/lib/i18n'
 
 interface Props {
   user: { name: string; email: string; avatarUrl: string | null; plan: string }
@@ -17,19 +18,12 @@ interface Props {
   repliesThisMonth?: number
 }
 
-const PAGE_LABELS: Record<string, string> = {
-  '/dashboard': 'Dashboard',
-  '/opportunities': 'Inbox',
-  '/products': 'Products',
-  '/geo': 'GEO',
-  '/settings': 'Settings',
-}
-
-function getPageLabel(pathname: string) {
-  for (const [key, label] of Object.entries(PAGE_LABELS)) {
-    if (pathname === key || (key !== '/dashboard' && pathname.startsWith(key))) return label
+function getPageKey(pathname: string) {
+  const keys = ['/opportunities', '/products', '/geo', '/settings', '/dashboard']
+  for (const key of keys) {
+    if (pathname === key || (key !== '/dashboard' && pathname.startsWith(key))) return key
   }
-  return 'Redgrow'
+  return null
 }
 
 export function DashboardShell({ user, products, children, opportunityCount = 0, repliesThisMonth = 0 }: Props) {
@@ -40,9 +34,20 @@ export function DashboardShell({ user, products, children, opportunityCount = 0,
   const [notifOpen, setNotifOpen] = useState(false)
   const [dark, setDark] = useState(true)
   const [productsOpen, setProductsOpen] = useState(false)
+  const { lang, setLang } = useLanguage()
+  const t = useT()
   const product = products[0]
   const initials = (user.name || user.email).slice(0, 2).toUpperCase()
-  const pageLabel = getPageLabel(pathname)
+
+  const PAGE_LABEL_KEYS: Record<string, string> = {
+    '/dashboard': t.nav.dashboard,
+    '/opportunities': t.nav.inbox,
+    '/products': t.nav.products,
+    '/geo': t.nav.geo,
+    '/settings': t.nav.settings,
+  }
+  const pageKey = getPageKey(pathname)
+  const pageLabel = pageKey ? (PAGE_LABEL_KEYS[pageKey] ?? 'Redgrow') : 'Redgrow'
 
   const planLimits = PLAN_LIMITS[user.plan as keyof typeof PLAN_LIMITS] ?? PLAN_LIMITS['FREE']
   const replyLimit = planLimits.repliesPerMonth
@@ -53,12 +58,12 @@ export function DashboardShell({ user, products, children, opportunityCount = 0,
   // STARTER/GROWTH: show unlocked "Add product" slots up to plan limit
   const lockedSlots = isFree ? 1 : 0
   const addSlots = isFree ? 0 : Math.max(0, productLimit - products.length)
-  const upgradeLabel = user.plan === 'FREE' ? 'Upgrade to Starter' : user.plan === 'STARTER' ? 'Upgrade to Growth' : null
+  const upgradeLabel = user.plan === 'FREE' ? t.nav.upgradeToStarter : user.plan === 'STARTER' ? t.nav.upgradeToGrowth : null
 
   const PLAN_DISPLAY: Record<string, string> = {
-    FREE: 'Free plan',
-    STARTER: 'Starter plan',
-    GROWTH: 'Growth plan',
+    FREE: t.plans.FREE,
+    STARTER: t.plans.STARTER,
+    GROWTH: t.plans.GROWTH,
   }
 
   useEffect(() => {
@@ -84,11 +89,11 @@ export function DashboardShell({ user, products, children, opportunityCount = 0,
   }
 
   const navItems = [
-    { href: '/dashboard',     label: 'Dashboard', icon: HomeIcon },
-    { href: '/opportunities', label: 'Inbox',     icon: InboxIcon, badge: opportunityCount > 0 ? String(opportunityCount) : null },
-    { href: '/products',      label: 'Products',  icon: BoxIcon },
-    { href: '/geo',           label: 'GEO',       icon: GeoIcon },
-    { href: '/settings',      label: 'Settings',  icon: SettingsIcon },
+    { href: '/dashboard',     label: t.nav.dashboard, icon: HomeIcon },
+    { href: '/opportunities', label: t.nav.inbox,     icon: InboxIcon, badge: opportunityCount > 0 ? String(opportunityCount) : null },
+    { href: '/products',      label: t.nav.products,  icon: BoxIcon },
+    { href: '/geo',           label: t.nav.geo,       icon: GeoIcon },
+    { href: '/settings',      label: t.nav.settings,  icon: SettingsIcon },
   ]
 
   const themeVars = (dark ? DARK_VARS : LIGHT_VARS) as React.CSSProperties
@@ -138,7 +143,7 @@ export function DashboardShell({ user, products, children, opportunityCount = 0,
               </span>
             )}
             <span style={{ flex: 1, fontSize: 15, fontWeight: 500, color: product ? S.text : S.text4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {product ? product.name : 'No product'}
+              {product ? product.name : t.nav.noProduct}
             </span>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={S.text3} strokeWidth="2"
               style={{ flexShrink: 0, transform: productsOpen ? 'rotate(180deg)' : 'none', transition: 'transform .18s' }}>
@@ -182,7 +187,7 @@ export function DashboardShell({ user, products, children, opportunityCount = 0,
                     }}>
                       <svg width="10" height="10" fill="none" stroke={S.text4} strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                     </span>
-                    <span style={{ fontSize: 12, color: S.text4 }}>Add product</span>
+                    <span style={{ fontSize: 12, color: S.text4 }}>{t.nav.addProduct}</span>
                   </div>
                   {upgradeLabel && (
                     <Link href="/settings?tab=billing" onClick={e => e.stopPropagation()} style={{ display: 'block', marginTop: 4, fontSize: 10.5, color: S.orange2, textDecoration: 'none', fontWeight: 600, fontFamily: 'JetBrains Mono, monospace', letterSpacing: '.03em' }}>
@@ -205,7 +210,7 @@ export function DashboardShell({ user, products, children, opportunityCount = 0,
                   }}>
                     <svg width="10" height="10" fill="none" stroke={S.text3} strokeWidth="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                   </span>
-                  <span style={{ flex: 1, fontSize: 12.5, color: S.text3, fontWeight: 500 }}>Add product</span>
+                  <span style={{ flex: 1, fontSize: 12.5, color: S.text3, fontWeight: 500 }}>{t.nav.addProduct}</span>
                 </Link>
               ))}
             </div>
@@ -215,7 +220,7 @@ export function DashboardShell({ user, products, children, opportunityCount = 0,
         {/* Nav */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13, letterSpacing: '.16em', textTransform: 'uppercase', color: S.text4, padding: '4px 12px 6px' }}>
-            Workspace
+            {t.nav.workspace}
           </div>
           {navItems.map(({ href, label, icon: Icon, badge }) => {
             const effectivePath = pendingHref ?? pathname
@@ -280,7 +285,7 @@ export function DashboardShell({ user, products, children, opportunityCount = 0,
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontFamily: "'JetBrains Mono', monospace", fontSize: 11.5, color: S.text3 }}>
               <span>{PLAN_DISPLAY[user.plan] ?? user.plan}</span>
-              <span>{repliesThisMonth} / {replyLimit} replies</span>
+              <span>{repliesThisMonth} / {replyLimit} {t.nav.replies}</span>
             </div>
             <button
               onClick={handleSignOut}
@@ -294,7 +299,7 @@ export function DashboardShell({ user, products, children, opportunityCount = 0,
               }}
             >
               <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-              {signingOut ? 'Signing out…' : 'Sign out'}
+              {signingOut ? t.nav.signingOut : t.nav.signOut}
             </button>
           </div>
         </div>
@@ -316,10 +321,28 @@ export function DashboardShell({ user, products, children, opportunityCount = 0,
 
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, position: 'relative' }}>
 
+            {/* Language toggle */}
+            <button
+              onClick={() => setLang(lang === 'en' ? 'de' : 'en')}
+              title={lang === 'en' ? 'Auf Deutsch wechseln' : 'Switch to English'}
+              style={{
+                height: 34, borderRadius: 8, display: 'inline-flex',
+                alignItems: 'center', justifyContent: 'center',
+                padding: '0 10px', gap: 5,
+                background: S.panel2, border: `1px solid ${S.line2}`,
+                cursor: 'pointer', color: S.text2, transition: 'background .12s, border-color .12s',
+                fontFamily: "'JetBrains Mono', monospace", fontSize: 12, fontWeight: 700, letterSpacing: '.04em',
+              }}
+            >
+              <span style={{ opacity: lang === 'en' ? 1 : 0.45 }}>EN</span>
+              <span style={{ color: S.line2 }}>/</span>
+              <span style={{ opacity: lang === 'de' ? 1 : 0.45 }}>DE</span>
+            </button>
+
             {/* Theme toggle */}
             <button
               onClick={toggleTheme}
-              title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={dark ? t.nav.switchToLight : t.nav.switchToDark}
               style={{
                 width: 34, height: 34, borderRadius: '50%', display: 'inline-flex',
                 alignItems: 'center', justifyContent: 'center',
@@ -345,7 +368,7 @@ export function DashboardShell({ user, products, children, opportunityCount = 0,
             {/* Notifications bell */}
             <button
               onClick={() => setNotifOpen(o => !o)}
-              title="Notifications"
+              title={t.nav.notifications}
               style={{
                 width: 34, height: 34, borderRadius: '50%', display: 'inline-flex',
                 alignItems: 'center', justifyContent: 'center',
@@ -375,8 +398,8 @@ export function DashboardShell({ user, products, children, opportunityCount = 0,
                     padding: '13px 18px', borderBottom: `1px solid ${S.line}`,
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   }}>
-                    <span style={{ fontSize: 16, fontWeight: 700, color: S.text }}>Notifications</span>
-                    <span style={{ fontSize: 13, color: S.text4, fontFamily: "'JetBrains Mono', monospace" }}>0 new</span>
+                    <span style={{ fontSize: 16, fontWeight: 700, color: S.text }}>{t.nav.notifications}</span>
+                    <span style={{ fontSize: 13, color: S.text4, fontFamily: "'JetBrains Mono', monospace" }}>0 {lang === 'de' ? 'neu' : 'new'}</span>
                   </div>
                   <div style={{ padding: '36px 18px', textAlign: 'center' }}>
                     <div style={{
@@ -389,9 +412,9 @@ export function DashboardShell({ user, products, children, opportunityCount = 0,
                         <path d="M13.7 21a2 2 0 0 1-3.4 0"/>
                       </svg>
                     </div>
-                    <p style={{ fontSize: 15, fontWeight: 600, color: S.text3, margin: '0 0 4px' }}>No notifications</p>
+                    <p style={{ fontSize: 15, fontWeight: 600, color: S.text3, margin: '0 0 4px' }}>{t.nav.noNotifications}</p>
                     <p style={{ fontSize: 14, color: S.text4, margin: 0, lineHeight: 1.5 }}>
-                      We'll let you know when something needs attention.
+                      {t.nav.notifHint}
                     </p>
                   </div>
                 </div>

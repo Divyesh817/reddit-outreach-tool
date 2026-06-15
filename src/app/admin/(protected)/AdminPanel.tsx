@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useLanguage } from '@/lib/i18n'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -96,6 +97,7 @@ const s = {
 
 export default function AdminPanel() {
   const [tab, setTab] = useState<'emails' | 'users' | 'payments' | 'prompts' | 'support'>('emails')
+  const { lang, setLang } = useLanguage()
   const [data, setData] = useState<AdminData | null>(null)
   const [dataLoading, setDataLoading] = useState(false)
 
@@ -119,12 +121,30 @@ export default function AdminPanel() {
       <div style={s.header}>
         <span style={s.logo}><span style={s.dot} />Redgrow</span>
         <span style={s.badge}>Admin</span>
-        <a
-          href="/dashboard"
-          style={{ marginLeft: 'auto', padding: '7px 16px', background: '#222', color: '#f5f5f5', border: '1px solid #333', borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: 'none' }}
-        >
-          Go to app →
-        </a>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 4, background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, padding: 3 }}>
+            {(['en', 'de'] as const).map(l => (
+              <button
+                key={l}
+                onClick={() => setLang(l)}
+                style={{
+                  padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700,
+                  background: lang === l ? '#E54B1B' : 'transparent',
+                  color: lang === l ? '#fff' : '#666',
+                  border: 'none', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '.06em',
+                }}
+              >
+                {l}
+              </button>
+            ))}
+          </div>
+          <a
+            href="/dashboard"
+            style={{ padding: '7px 16px', background: '#222', color: '#f5f5f5', border: '1px solid #333', borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: 'none' }}
+          >
+            Go to app →
+          </a>
+        </div>
       </div>
 
       <div style={s.tabs}>
