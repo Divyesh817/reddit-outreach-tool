@@ -31,12 +31,11 @@ function LoginContent({ isSignup }: { isSignup: boolean }) {
   const router = useRouter()
   const tl = useT().login
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '')
-
   async function handleGoogle() {
+    const origin = window.location.origin
     await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${appUrl}/auth/callback` },
+      options: { redirectTo: `${origin}/auth/callback` },
     })
   }
 
