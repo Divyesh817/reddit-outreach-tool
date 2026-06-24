@@ -69,7 +69,7 @@ interface Props {
   initialStatus: string
   productName: string
   products: { id: string; name: string }[]
-  counts: { queued: number; posted: number; skipped: number; noPitch: number }
+  counts: { queued: number; posted: number; skipped: number }
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -173,12 +173,13 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
   }
 
   // Derive opps + counts from allOpps to keep everything in sync after actions
+  // NO_PITCH leads show inline in the New tab with a karma tag
   const opps = allOpps.filter(o =>
-    o.status === activeStatus &&
+    (activeStatus === 'QUEUED' ? (o.status === 'QUEUED' || o.status === 'NO_PITCH') : o.status === activeStatus) &&
     (filterProductId === 'all' || o.product.id === filterProductId)
   )
   const counts = {
-    queued:  allOpps.filter(o => o.status === 'QUEUED').length,
+    queued:  allOpps.filter(o => o.status === 'QUEUED' || o.status === 'NO_PITCH').length,
     posted:  allOpps.filter(o => o.status === 'POSTED').length,
     skipped: allOpps.filter(o => o.status === 'SKIPPED').length,
   }
@@ -206,8 +207,8 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
     : opps
 
   const tabCounts: Record<string, number> = {
-    QUEUED: counts.queued,
-    POSTED: counts.posted,
+    QUEUED:  counts.queued,
+    POSTED:  counts.posted,
     SKIPPED: counts.skipped,
   }
 
@@ -594,10 +595,9 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
             {/* Status tabs */}
             <div style={{ display: 'inline-flex', background: S.card, border: `1px solid ${S.line}`, borderRadius: 8, padding: 3, gap: 2 }}>
               {([
-                { key: 'QUEUED',   label: 'New' },
-                { key: 'NO_PITCH', label: 'Karma' },
-                { key: 'POSTED',   label: 'Done' },
-                { key: 'SKIPPED',  label: 'Dismissed' },
+                { key: 'QUEUED',  label: 'New' },
+                { key: 'POSTED',  label: 'Done' },
+                { key: 'SKIPPED', label: 'Dismissed' },
               ] as const).map(tab => {
                 const active = activeStatus === tab.key
                 return (

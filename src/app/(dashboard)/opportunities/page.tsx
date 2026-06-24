@@ -41,10 +41,9 @@ export default async function OpportunitiesPage({
   ])
 
   const counts = {
-    queued:   allOpportunities.filter(o => o.status === 'QUEUED').length,
-    posted:   allOpportunities.filter(o => o.status === 'POSTED').length,
-    skipped:  allOpportunities.filter(o => o.status === 'SKIPPED').length,
-    noPitch:  allOpportunities.filter(o => o.status === 'NO_PITCH').length,
+    queued:  allOpportunities.filter(o => o.status === 'QUEUED' || o.status === 'NO_PITCH').length,
+    posted:  allOpportunities.filter(o => o.status === 'POSTED').length,
+    skipped: allOpportunities.filter(o => o.status === 'SKIPPED').length,
   }
 
   return (
