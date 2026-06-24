@@ -56,6 +56,7 @@ interface Opportunity {
   painType: PainType
   shouldPitch: boolean
   scoringReasoning: string | null
+  matchedKeywords: string[]
   status: string
   topComments: string[]
   subreddit: { name: string; allowsPromotion: boolean; rulesScannedAt: string | null }
@@ -68,7 +69,7 @@ interface Props {
   initialStatus: string
   productName: string
   products: { id: string; name: string }[]
-  counts: { queued: number; posted: number; skipped: number }
+  counts: { queued: number; posted: number; skipped: number; noPitch: number }
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -356,8 +357,14 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
       const prep = await prepRes.json().catch(() => ({}))
 
       if (prep.error && !prep.subreddits) {
-        setScanMsg(prep.limitReached ? `Limit reached: ${prep.error}` : `Error: ${prep.error}`)
-        setTimeout(() => setScanMsg(''), 7000)
+        setScanMsg(
+          prep.tooSoon
+            ? `Next scan available in ${prep.nextScanIn} min — scans run every 3 hours`
+            : prep.limitReached
+            ? `Limit reached: ${prep.error}`
+            : `Error: ${prep.error}`
+        )
+        setTimeout(() => setScanMsg(''), 10000)
         setScanning(false)
         return
       }
@@ -405,9 +412,15 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
       })
       const result = await processRes.json().catch(() => ({}))
       const totalCreated = result.totalCreated ?? 0
+      const avgScore = result.avgIntentScore ?? 0
+      const subsScanned = result.subredditsScanned ?? subreddits.length
 
       const n = totalCreated
-      setScanMsg(n > 0 ? `${n} new lead${n !== 1 ? 's' : ''} found!` : `Scanned ${subreddits.length} subreddit${subreddits.length !== 1 ? 's' : ''} — no new high-intent threads`)
+      setScanMsg(
+        n > 0
+          ? `${subsScanned} subreddit${subsScanned !== 1 ? 's' : ''} scanned · ${n} lead${n !== 1 ? 's' : ''} found · Avg quality ${avgScore}%`
+          : `Scanned ${subsScanned} subreddit${subsScanned !== 1 ? 's' : ''} — no new high-intent threads`
+      )
       setTimeout(() => setScanMsg(''), 7000)
       if (n > 0) {
         setLeadsToast({ count: n })
@@ -581,9 +594,10 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
             {/* Status tabs */}
             <div style={{ display: 'inline-flex', background: S.card, border: `1px solid ${S.line}`, borderRadius: 8, padding: 3, gap: 2 }}>
               {([
-                { key: 'QUEUED',  label: 'New' },
-                { key: 'POSTED',  label: 'Done' },
-                { key: 'SKIPPED', label: 'Dismissed' },
+                { key: 'QUEUED',   label: 'New' },
+                { key: 'NO_PITCH', label: 'Karma' },
+                { key: 'POSTED',   label: 'Done' },
+                { key: 'SKIPPED',  label: 'Dismissed' },
               ] as const).map(tab => {
                 const active = activeStatus === tab.key
                 return (
@@ -773,12 +787,16 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
 
                 {/* Signal row */}
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <SignalChip match icon={<CheckIc />} text={<>Matched <b style={{ color: S.text, fontWeight: 600 }}>{PAIN_STYLE[selected.painType].label.toLowerCase()}</b></>} />
+                  {selected.status === 'NO_PITCH' ? (
+                    <SignalChip icon={<AlertIc />} text={<><b style={{ color: S.text, fontWeight: 600 }}>Karma lead</b> — reply builds trust, no pitch</>} />
+                  ) : (
+                    <SignalChip match icon={<CheckIc />} text={<>Matched <b style={{ color: S.text, fontWeight: 600 }}>{PAIN_STYLE[selected.painType].label.toLowerCase()}</b></>} />
+                  )}
                   <SignalChip icon={<PersonIc />} text={<><b style={{ color: S.text, fontWeight: 600 }}>{PAIN_PERSONA[selected.painType]}</b> · {selected.painType.replace(/_/g, ' ')}</>} />
                   <SignalChip icon={<TrendIc />} text={<>ICP fit · <b style={{ color: S.text, fontWeight: 600 }}>{selected.intentScore >= 75 ? 'high' : selected.intentScore >= 50 ? 'medium' : 'low'}</b></>} />
-                  {!selected.shouldPitch && (
-                    <SignalChip icon={<AlertIc />} text={<>No pitch — value-only reply</>} />
-                  )}
+                  {(selected.matchedKeywords ?? []).map(kw => (
+                    <SignalChip key={kw} match icon={<CheckIc />} text={<>Keyword: <b style={{ color: S.text, fontWeight: 600 }}>{kw}</b></>} />
+                  ))}
                 </div>
 
                 {/* Original post */}

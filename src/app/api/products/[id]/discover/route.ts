@@ -24,6 +24,7 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
     keyBenefits: product.keyBenefits,
     competitors: product.competitors,
     summary: product.summary,
+    keywords: product.keywords,
   })
 
   const created = await Promise.allSettled(

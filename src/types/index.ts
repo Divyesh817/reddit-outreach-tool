@@ -115,6 +115,7 @@ export interface ProductProfile {
   keyBenefits: string[]
   competitors: string[]
   summary: string
+  keywords: string[]
 }
 
 // ─── Opportunity ──────────────────────────────────────────────────────────────
@@ -132,6 +133,7 @@ export interface OpportunityWithDetails {
   painType: PainType
   shouldPitch: boolean
   scoringReasoning: string | null
+  matchedKeywords: string[]
   status: OpportunityStatus
   subreddit: { name: string }
   replies: Array<{
@@ -151,6 +153,7 @@ export interface ScoringResult {
   painType: PainType
   shouldPitch: boolean
   reasoning: string
+  matchedKeywords: string[]
 }
 
 // ─── Reply Generation ─────────────────────────────────────────────────────────

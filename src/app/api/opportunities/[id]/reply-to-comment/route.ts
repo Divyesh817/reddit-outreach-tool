@@ -33,6 +33,7 @@ export async function POST(
     keyBenefits: opp.product.keyBenefits as string[],
     competitors: opp.product.competitors as string[],
     summary: opp.product.summary,
+    keywords: opp.product.keywords as string[],
   }
 
   const result = await generateCommentReply(

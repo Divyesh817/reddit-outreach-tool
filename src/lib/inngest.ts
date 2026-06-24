@@ -89,12 +89,12 @@ async function fetchCommentsRss(threadId: string): Promise<string[]> {
   } catch { return [] }
 }
 
-// ─── Shared: scan one subreddit for one product (RSS-based, 3-attempt) ────────
+// ─── Shared: scan one subreddit for one product ───────────────────────────────
 
 async function scanSubredditForProduct(
   product: {
     id: string; userId: string; url: string; name: string; description: string
-    targetAudience: string; keyBenefits: string[]; competitors: string[]; summary: string
+    targetAudience: string; keyBenefits: string[]; competitors: string[]; summary: string; keywords: string[]
   },
   subreddit: { id: string; name: string }
 ) {
@@ -115,104 +115,125 @@ async function scanSubredditForProduct(
   const profile: ProductProfile = {
     url: product.url, name: product.name, description: product.description,
     targetAudience: product.targetAudience, keyBenefits: product.keyBenefits,
-    competitors: product.competitors, summary: product.summary,
+    competitors: product.competitors, summary: product.summary, keywords: product.keywords,
   }
 
-  const lookbackWindows = [48, 72, 96]
-  const intentThresholds = [25, 15, 10]
-  const LEADS_PER_SCAN = 8
+  // Keyword/competitor match → lower bar (55), otherwise hold to 65
+  const MIN_INTENT_SCORE = 65
+  const MIN_INTENT_SCORE_WITH_SIGNAL = 55
+  const MAX_LEADS_PER_SCAN = 6
+  const LOOKBACK_HOURS = 48
   let created = 0
 
-  for (let attempt = 0; attempt < lookbackWindows.length; attempt++) {
-    const cutoff = new Date(Date.now() - lookbackWindows[attempt] * 60 * 60 * 1000)
-    const minScore = intentThresholds[attempt]
-    const isLast = attempt === lookbackWindows.length - 1
+  // Merge global patterns with product-specific keywords from onboarding
+  const productKeywords = (product.keywords ?? []).map(k => k.toLowerCase())
+  const allPatterns = [...HIGH_INTENT_PATTERNS, ...productKeywords]
 
-    const fresh = allThreads.filter(t => {
-      if (new Date(t.created_utc * 1000) < cutoff) return false
-      if (t.author === '[deleted]' || t.author === 'AutoModerator') return false
-      if (t.title === '[deleted]' || t.title === '[removed]') return false
-      if (t.score < -3) return false
-      return true
-    })
+  const cutoff = new Date(Date.now() - LOOKBACK_HOURS * 60 * 60 * 1000)
 
-    const candidates = isLast ? fresh : fresh.filter(t => {
-      const text = `${t.title} ${t.selftext}`.toLowerCase()
-      if (profile.competitors.some((c: string) => c && text.includes(c.toLowerCase()))) return true
-      return HIGH_INTENT_PATTERNS.some(p => text.includes(p))
-    })
+  const fresh = allThreads.filter(t => {
+    if (new Date(t.created_utc * 1000) < cutoff) return false
+    if (t.author === '[deleted]' || t.author === 'AutoModerator') return false
+    if (t.title === '[deleted]' || t.title === '[removed]') return false
+    if (t.score < -3) return false
+    return true
+  })
 
-    const existingIds = new Set(
-      (await prisma.opportunity.findMany({
-        where: { redditPostId: { in: candidates.map(t => t.id) }, product: { userId: product.userId } },
-        select: { redditPostId: true },
-      })).map(o => o.redditPostId)
-    )
+  const candidates = fresh.filter(t => {
+    const text = `${t.title} ${t.selftext}`.toLowerCase()
+    if (profile.competitors.some((c: string) => c && text.includes(c.toLowerCase()))) return true
+    return allPatterns.some(p => text.includes(p))
+  })
 
-    const toScore = candidates.filter(t => !existingIds.has(t.id)).slice(0, 15)
+  const existingIds = new Set(
+    (await prisma.opportunity.findMany({
+      where: { redditPostId: { in: candidates.map(t => t.id) }, product: { userId: product.userId } },
+      select: { redditPostId: true },
+    })).map(o => o.redditPostId)
+  )
 
-    const scores = await batchScoreOpportunities(
-      toScore.map(t => ({ id: t.id, title: t.title, body: t.selftext })),
-      profile
-    )
+  const toScore = candidates.filter(t => !existingIds.has(t.id)).slice(0, 7)
+  if (!toScore.length) return 0
 
-    for (let i = 0; i < toScore.length; i++) {
-      const thread = toScore[i]
-      const scoring = scores[i]
-      if (!scoring || scoring.intentScore < minScore) continue
+  // Fetch comments before scoring so Claude has full context
+  const threadsWithComments = await Promise.all(
+    toScore.map(async t => ({
+      id: t.id,
+      title: t.title,
+      body: t.selftext,
+      comments: await fetchCommentsRss(t.id),
+      _raw: t,
+    }))
+  )
 
-      const topComments = await fetchCommentsRss(thread.id)
+  const scores = await batchScoreOpportunities(
+    threadsWithComments.map(t => ({ id: t.id, title: t.title, body: t.body, comments: t.comments })),
+    profile
+  )
 
-      try {
-        const opportunity = await prisma.opportunity.create({
-          data: {
-            productId: product.id,
-            subredditId: subreddit.id,
-            redditPostId: thread.id,
-            redditPostUrl: `https://reddit.com${thread.permalink}`,
-            redditPostTitle: thread.title,
-            redditPostBody: thread.selftext || null,
-            topComments,
-            redditAuthor: thread.author,
-            redditScore: thread.score,
-            redditCommentCount: thread.num_comments,
-            redditPostedAt: new Date(thread.created_utc * 1000),
-            intentScore: scoring.intentScore,
-            painType: scoring.painType,
-            shouldPitch: scoring.shouldPitch,
-            scoringReasoning: scoring.reasoning,
-            status: 'QUEUED',
-          }
-        })
+  for (let i = 0; i < threadsWithComments.length; i++) {
+    const { _raw: thread, comments: topComments } = threadsWithComments[i]
+    const scoring = scores[i]
+    if (!scoring) continue
 
-        // Alert for high-intent leads (score >= 80)
-        if (scoring.intentScore >= 80) {
-          try {
-            const owner = await prisma.user.findUnique({
-              where: { id: product.userId },
-              select: { email: true, notificationPrefs: true },
-            })
-            const prefs = (owner?.notificationPrefs as any) ?? {}
-            if (owner?.email && prefs.highIntent !== false) {
-              await sendHighIntentAlert(owner.email, {
-                productName: product.name,
-                postTitle: thread.title,
-                subreddit: name,
-                intentScore: scoring.intentScore,
-                postUrl: `https://reddit.com${thread.permalink}`,
-                opportunityId: opportunity.id,
-              })
-            }
-          } catch { /* non-fatal */ }
+    // Lower the bar if the thread directly matched a product keyword or competitor
+    const hasDirectSignal = (scoring.matchedKeywords?.length ?? 0) > 0 ||
+      profile.competitors.some(c => c && `${threadsWithComments[i].title} ${threadsWithComments[i].body}`.toLowerCase().includes(c.toLowerCase()))
+    const effectiveMin = hasDirectSignal ? MIN_INTENT_SCORE_WITH_SIGNAL : MIN_INTENT_SCORE
+
+    // Karma-worthy: relevant topic but not pitch-worthy — save as NO_PITCH for engagement ratio
+    const isKarmaLead = scoring.intentScore >= 50 && !scoring.shouldPitch
+    // Skip anything below effective threshold
+    if (scoring.intentScore < effectiveMin && !isKarmaLead) continue
+
+    try {
+      const opportunity = await prisma.opportunity.create({
+        data: {
+          productId: product.id,
+          subredditId: subreddit.id,
+          redditPostId: thread.id,
+          redditPostUrl: `https://reddit.com${thread.permalink}`,
+          redditPostTitle: thread.title,
+          redditPostBody: thread.selftext || null,
+          topComments,
+          redditAuthor: thread.author,
+          redditScore: thread.score,
+          redditCommentCount: thread.num_comments,
+          redditPostedAt: new Date(thread.created_utc * 1000),
+          intentScore: scoring.intentScore,
+          painType: scoring.painType,
+          shouldPitch: scoring.shouldPitch,
+          scoringReasoning: scoring.reasoning,
+          matchedKeywords: scoring.matchedKeywords ?? [],
+          status: isKarmaLead ? 'NO_PITCH' : 'QUEUED',
         }
+      })
 
-        created++
-      } catch { continue }
+      // Alert for high-intent leads (score >= 80)
+      if (scoring.intentScore >= 80) {
+        try {
+          const owner = await prisma.user.findUnique({
+            where: { id: product.userId },
+            select: { email: true, notificationPrefs: true },
+          })
+          const prefs = (owner?.notificationPrefs as any) ?? {}
+          if (owner?.email && prefs.highIntent !== false) {
+            await sendHighIntentAlert(owner.email, {
+              productName: product.name,
+              postTitle: thread.title,
+              subreddit: name,
+              intentScore: scoring.intentScore,
+              postUrl: `https://reddit.com${thread.permalink}`,
+              opportunityId: opportunity.id,
+            })
+          }
+        } catch { /* non-fatal */ }
+      }
 
-      if (created >= LEADS_PER_SCAN) break
-    }
+      created++
+    } catch { continue }
 
-    if (created > 0) break
+    if (created >= MAX_LEADS_PER_SCAN) break
   }
 
   await prisma.subreddit.update({
@@ -223,34 +244,34 @@ async function scanSubredditForProduct(
   return created
 }
 
-// ─── Job 1: Scan subreddits for new threads (PAUSED — re-enable when ready) ───
-// export const scanSubreddits = inngest.createFunction(
-//   { id: 'scan-subreddits', concurrency: { limit: 5 } },
-//   { cron: '0 */3 * * *' },
-//   async ({ step }) => {
-//     const activeProducts = await step.run('fetch-products', async () => {
-//       return prisma.product.findMany({
-//         where: { isActive: true },
-//         select: {
-//           id: true, userId: true, url: true, name: true, description: true,
-//           targetAudience: true, keyBenefits: true, competitors: true, summary: true,
-//           subreddits: { where: { isActive: true, isBlacklisted: false }, select: { id: true, name: true } },
-//         },
-//       })
-//     })
-//     let totalCreated = 0
-//     for (const product of activeProducts) {
-//       for (const subreddit of product.subreddits) {
-//         const created = await step.run(`scan-${product.id}-${subreddit.name}`, () =>
-//           scanSubredditForProduct(product, subreddit)
-//         )
-//         totalCreated += created
-//       }
-//     }
-//     return { totalCreated }
-//   }
-// )
-// scanSubreddits paused — not registered
+// ─── Job 1: Scan subreddits for new threads — every 3 hours ──────────────────
+
+export const scanSubreddits = inngest.createFunction(
+  { id: 'scan-subreddits', concurrency: { limit: 5 } },
+  { cron: '0 */3 * * *' },
+  async ({ step }) => {
+    const activeProducts = await step.run('fetch-products', async () => {
+      return prisma.product.findMany({
+        where: { isActive: true },
+        select: {
+          id: true, userId: true, url: true, name: true, description: true,
+          targetAudience: true, keyBenefits: true, competitors: true, summary: true, keywords: true,
+          subreddits: { where: { isActive: true, isBlacklisted: false }, select: { id: true, name: true } },
+        },
+      })
+    })
+    let totalCreated = 0
+    for (const product of activeProducts) {
+      for (const subreddit of product.subreddits) {
+        const created = await step.run(`scan-${product.id}-${subreddit.name}`, () =>
+          scanSubredditForProduct(product, subreddit)
+        )
+        totalCreated += created
+      }
+    }
+    return { totalCreated }
+  }
+)
 
 // ─── Job 2: Post approved replies ─────────────────────────────────────────────
 
@@ -420,7 +441,7 @@ export const manualScan = inngest.createFunction(
         where: { userId, isActive: true },
         select: {
           id: true, userId: true, url: true, name: true, description: true,
-          targetAudience: true, keyBenefits: true, competitors: true, summary: true,
+          targetAudience: true, keyBenefits: true, competitors: true, summary: true, keywords: true,
           subreddits: { where: { isActive: true, isBlacklisted: false }, select: { id: true, name: true } },
         },
       })
@@ -567,11 +588,11 @@ export const welcomeEmail = inngest.createFunction(
   }
 )
 
-// ─── Job 8: Daily digest — 8am UTC every day ──────────────────────────────────
+// ─── Job 8: Leads digest — 8am UTC every 2 days, only if new leads exist ──────
 
 export const dailyDigest = inngest.createFunction(
   { id: 'daily-digest' },
-  { cron: '0 8 * * *' },
+  { cron: '0 8 */2 * *' },
   async ({ step }) => {
     const users = await step.run('fetch-users', () =>
       prisma.user.findMany({
@@ -580,9 +601,8 @@ export const dailyDigest = inngest.createFunction(
       })
     )
 
-    const yesterday = new Date()
-    yesterday.setDate(yesterday.getDate() - 1)
-    yesterday.setHours(0, 0, 0, 0)
+    // Look back 48 hours to match the 2-day cadence
+    const since = new Date(Date.now() - 48 * 60 * 60 * 1000)
 
     let sent = 0
     for (const user of users) {
@@ -593,13 +613,14 @@ export const dailyDigest = inngest.createFunction(
         const opps = await prisma.opportunity.findMany({
           where: {
             product: { userId: user.id },
-            createdAt: { gte: yesterday },
+            createdAt: { gte: since },
             status: 'QUEUED',
           },
           orderBy: { intentScore: 'desc' },
           take: 10,
           include: { product: { select: { name: true } }, subreddit: { select: { name: true } } },
         })
+        // Only send if at least one lead came in
         if (opps.length === 0) return
 
         await sendDailyDigest(
@@ -682,6 +703,6 @@ export const weeklySummary = inngest.createFunction(
 )
 
 export const functions = [
-  manualScan, postApprovedReplies, dailyWarmup,
+  scanSubreddits, manualScan, postApprovedReplies, dailyWarmup,
   weeklyGeoDigest, welcomeEmail, dailyDigest, weeklySummary,
 ]

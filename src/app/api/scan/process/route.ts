@@ -71,6 +71,7 @@ export async function POST(req: Request) {
 
   let totalCreated = 0
   let totalScanned = 0
+  let intentScoreSum = 0
 
   for (let attempt = 0; attempt < lookbackWindows.length; attempt++) {
     const lookbackHours = lookbackWindows[attempt]
@@ -81,7 +82,7 @@ export async function POST(req: Request) {
     for (const { subredditId, productId, threads: rawThreads } of subredditsData) {
       const product = await prisma.product.findUnique({
         where: { id: productId },
-        select: { url: true, name: true, description: true, targetAudience: true, keyBenefits: true, competitors: true, summary: true },
+        select: { url: true, name: true, description: true, targetAudience: true, keyBenefits: true, competitors: true, summary: true, keywords: true },
       })
       if (!product) continue
 
@@ -93,6 +94,7 @@ export async function POST(req: Request) {
         keyBenefits: product.keyBenefits as string[],
         competitors: product.competitors as string[],
         summary: product.summary,
+        keywords: product.keywords as string[],
       }
 
       const subreddit = await prisma.subreddit.findUnique({ where: { id: subredditId }, select: { id: true, name: true } })
@@ -152,6 +154,7 @@ export async function POST(req: Request) {
               status: 'QUEUED',
             }
           })
+          intentScoreSum += scoring.intentScore
           totalCreated++
         } catch { continue }
         if (totalCreated >= perScanCap) break
@@ -164,5 +167,8 @@ export async function POST(req: Request) {
     if (totalCreated > 0) break
   }
 
-  return NextResponse.json({ totalCreated, totalScanned, plan })
+  const avgIntentScore = totalCreated > 0 ? Math.round(intentScoreSum / totalCreated) : 0
+  const subredditsScanned = subredditsData.length
+
+  return NextResponse.json({ totalCreated, totalScanned, plan, avgIntentScore, subredditsScanned })
 }

@@ -64,6 +64,7 @@ If HTML is unavailable, make your best inference from the URL and domain name. A
     keyBenefits:    Array.isArray(parsed?.keyBenefits)  ? parsed.keyBenefits.map(String).filter(Boolean)  : [],
     competitors:    Array.isArray(parsed?.competitors)  ? parsed.competitors.map(String).filter(Boolean)   : [],
     summary:        String(parsed?.summary || parsed?.description || `A product at ${domain}`),
+    keywords:       [],
   }
 }
 
@@ -81,25 +82,25 @@ export async function discoverSubreddits(product: ProductProfile): Promise<Array
       role: 'user',
       content: `You are a Reddit marketing expert. Suggest the best subreddits to find high-intent leads for this product.
 
-PRODUCT SUMMARY:
-${product.summary}
-
+PRODUCT: ${product.name}
+WHAT IT DOES: ${product.summary}
 TARGET AUDIENCE: ${product.targetAudience}
-COMPETITORS: ${product.competitors.join(', ')}
+COMPETITORS: ${product.competitors.join(', ') || 'none'}
+${product.keywords?.length ? `INTENT KEYWORDS: ${product.keywords.join(', ')}` : ''}
 
 Rules:
-- Only suggest subreddits where the target audience actually hangs out
-- Include subreddits where competitor complaints are likely
-- Exclude subreddits with strict no-self-promotion rules (r/startups, r/entrepreneur have strict rules — include but flag)
-- Score fit 0–100 based on audience match
+- Only suggest subreddits where the target audience actually hangs out and discusses their problems
+- Prioritise subreddits where competitor complaints and tool-switching discussions are common
+- Include niche subreddits specific to the audience's job or industry, not just generic startup/SaaS subs
+- Score fit 0–100 based on how likely a real buyer is posting there
 
 Return ONLY valid JSON array, no markdown:
 [
-  { "name": "SaaS", "fitScore": 92, "fitReason": "Founders actively discuss tools here" },
+  { "name": "SaaS", "fitScore": 92, "fitReason": "Founders actively discuss tools and switching pain here" },
   ...
 ]
 
-Return 8–12 subreddits.`
+Return 10–14 subreddits.`
     }]
   })
 
@@ -165,54 +166,78 @@ shouldPitch = false if: thread is just venting with no solution-seeking, thread 
 // ─── Batch Intent Scoring (Haiku — 1 call for up to 15 threads) ──────────────
 
 export async function batchScoreOpportunities(
-  threads: { id: string; title: string; body: string }[],
+  threads: { id: string; title: string; body: string; comments?: string[] }[],
   product: ProductProfile
 ): Promise<ScoringResult[]> {
   if (!threads.length) return []
 
-  const threadList = threads.map((t, i) =>
-    `[${i}] ID:${t.id}\nTITLE: ${t.title}\nBODY: ${t.body?.slice(0, 300) || '(no body)'}`
-  ).join('\n\n')
+  const threadList = threads.map((t, i) => {
+    const commentBlock = t.comments?.length
+      ? `\nTOP COMMENTS:\n${t.comments.slice(0, 3).map((c, j) => `  [c${j + 1}] ${c}`).join('\n')}`
+      : ''
+    return `[${i}] ID:${t.id}\nTITLE: ${t.title}\nBODY: ${t.body?.slice(0, 800) || '(no body)'}${commentBlock}`
+  }).join('\n\n')
+
+  const keywordsSection = product.keywords?.length
+    ? `\nHIGH-INTENT KEYWORDS (product-specific signals — any direct match must score ≥ 70):\n${product.keywords.join(', ')}`
+    : ''
 
   const response = await client.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 1500,
+    max_tokens: 2000,
     messages: [{
       role: 'user',
-      content: `You are scoring Reddit threads for buying intent relevant to a specific product.
+      content: `You are a lead quality expert scoring Reddit threads for buying intent. Only surface threads where a real person genuinely needs this product — quality over quantity.
 
-PRODUCT SUMMARY:
-${product.summary}
-COMPETITORS: ${product.competitors.join(', ') || 'none'}
+PRODUCT: ${product.name}
+WHO IT'S FOR: ${product.targetAudience}
+WHAT IT SOLVES: ${product.summary}
+KEY BENEFITS: ${product.keyBenefits.join(', ')}
+COMPETITORS: ${product.competitors.join(', ') || 'none'}${keywordsSection}
 
 PAIN TYPES:
-- competitor_frustration: mentions a competitor negatively
-- switching_intent: actively looking to switch tools right now
-- active_tool_search: asking for tool recommendations
-- roi_frustration: using tools but getting no results or ROI
-- workflow_pain: struggling with the core problem the product solves
+- competitor_frustration: mentions a competitor negatively — person is frustrated and open to alternatives
+- switching_intent: actively looking to switch tools right now — highest conversion potential
+- active_tool_search: asking for recommendations — comparison-stage buyer ready to decide
+- roi_frustration: using a tool but getting no results — emotionally ready to change
+- workflow_pain: struggling with the exact problem this product solves
+
+SCORING RULES:
+- 70–100: clear buying signal — pitch this. Person has real pain this product directly solves.
+- 40–69: adjacent relevance but too vague, wrong audience, or unlikely to convert.
+- 0–39: not relevant, informational, or mods/bots/self-promo.
+- If a high-intent keyword appears in title or body → score must be ≥ 70.
+- shouldPitch = false if the subreddit/thread is hostile to promotion, anti-ad, or a pitch would get downvoted.
 
 THREADS TO SCORE:
 ${threadList}
 
-Return ONLY a valid JSON array with one entry per thread, in the same order:
+Return ONLY valid JSON, one entry per thread, same order:
 [
-  {"id":"<thread id>","intentScore":0-100,"painType":"one of the 5 types","shouldPitch":true,"reasoning":"1 sentence"},
-  ...
+  {
+    "id": "<thread id>",
+    "intentScore": 0-100,
+    "painType": "one of the 5 types",
+    "shouldPitch": true,
+    "reasoning": "1–2 sentences: why this is or isn't a strong lead for this specific product",
+    "matchedKeywords": ["keyword that appeared in the thread"]
+  }
 ]
 
-shouldPitch = false only if the thread is hostile to marketing or pitching would get downvoted.
-Return exactly ${threads.length} entries. No markdown, no explanation.`
+matchedKeywords: list only keywords from the HIGH-INTENT KEYWORDS section that literally appeared in the thread. Empty array if none.
+Return exactly ${threads.length} entries. No markdown, no text outside the JSON array.`
     }]
   })
 
   const text = response.content[0].type === 'text' ? response.content[0].text : '[]'
+  const fallback = (id?: string): ScoringResult => ({
+    intentScore: 0, painType: 'workflow_pain' as PainType, shouldPitch: false, reasoning: '', matchedKeywords: [],
+  })
   try {
     const results = parseJSON(text) as ScoringResult[]
-    // Ensure every thread gets a result, fill missing with score 0
-    return threads.map((t, i) => results[i] ?? { intentScore: 0, painType: 'workflow_pain', shouldPitch: false, reasoning: '' })
+    return threads.map((t, i) => results[i] ?? fallback(t.id))
   } catch {
-    return threads.map(() => ({ intentScore: 0, painType: 'workflow_pain' as PainType, shouldPitch: false, reasoning: '' }))
+    return threads.map(() => fallback())
   }
 }
 

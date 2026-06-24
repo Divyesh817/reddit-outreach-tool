@@ -59,6 +59,7 @@ export async function POST() {
       keyBenefits: product.keyBenefits as string[],
       competitors: product.competitors as string[],
       summary: product.summary,
+      keywords: product.keywords as string[],
     }
 
     for (const subreddit of product.subreddits) {

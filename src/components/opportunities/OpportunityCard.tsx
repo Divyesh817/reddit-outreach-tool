@@ -19,6 +19,8 @@ interface Opportunity {
   painType: PainType
   shouldPitch: boolean
   scoringReasoning: string | null
+  matchedKeywords: string[]
+  status: string
   subreddit: { name: string }
   replies: Array<{
     id: string
@@ -93,16 +95,22 @@ export function OpportunityCard({
         <div className="flex items-start gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-1">
-              <Badge variant={PAIN_COLORS[opp.painType]}>
-                {opp.painType === 'switching_intent' && '🔥 '}
-                {PAIN_TYPE_LABELS[opp.painType]}
-              </Badge>
+              {opp.status === 'NO_PITCH' ? (
+                <Badge variant="yellow">Karma / Engagement</Badge>
+              ) : (
+                <Badge variant={PAIN_COLORS[opp.painType]}>
+                  {opp.painType === 'switching_intent' && '🔥 '}
+                  {PAIN_TYPE_LABELS[opp.painType]}
+                </Badge>
+              )}
               <span className={`text-sm font-semibold ${intentColor}`}>
                 {opp.intentScore}% intent
               </span>
-              {!opp.shouldPitch && (
-                <Badge variant="red">⚠️ Don't pitch</Badge>
-              )}
+              {opp.matchedKeywords?.map(kw => (
+                <Badge key={kw} variant="purple" className="text-xs">
+                  {kw}
+                </Badge>
+              ))}
             </div>
             <a
               href={opp.redditPostUrl}
@@ -169,14 +177,20 @@ export function OpportunityCard({
 
         {/* Action buttons */}
         <div className="flex items-center gap-2 mt-4 pt-3 border-t border-gray-100">
-          <Button
-            size="sm"
-            onClick={approve}
-            loading={loading === 'approve'}
-            disabled={!reply || loading !== null}
-          >
-            Approve & queue
-          </Button>
+          {opp.status === 'NO_PITCH' ? (
+            <p className="text-xs text-gray-400 italic flex-1">
+              No product pitch — reply to build karma and posting ratio.
+            </p>
+          ) : (
+            <Button
+              size="sm"
+              onClick={approve}
+              loading={loading === 'approve'}
+              disabled={!reply || loading !== null}
+            >
+              Approve & queue
+            </Button>
+          )}
           <Button
             size="sm"
             variant="secondary"
@@ -184,7 +198,7 @@ export function OpportunityCard({
             loading={loading === 'regen'}
             disabled={loading !== null}
           >
-            Regenerate
+            {opp.status === 'NO_PITCH' ? 'Generate reply' : 'Regenerate'}
           </Button>
           <Button
             size="sm"

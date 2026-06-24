@@ -18,6 +18,7 @@ interface Opportunity {
   painType: PainType
   shouldPitch: boolean
   scoringReasoning: string | null
+  matchedKeywords: string[]
   status: string
   subreddit: { name: string }
   replies: Array<{

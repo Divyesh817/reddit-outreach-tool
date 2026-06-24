@@ -17,6 +17,23 @@ export async function POST() {
   const plan = (dbUser?.plan ?? 'FREE') as Plan
   const limits = PLAN_LIMITS[plan]
 
+  // Rate limit manual scans to once every 3 hours — same cadence as the auto-scan.
+  // Running more often just depletes the same thread pool the cron would have found.
+  const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000)
+  const lastScanned = await prisma.subreddit.findFirst({
+    where: { product: { userId: user.id } },
+    orderBy: { lastScannedAt: 'desc' },
+    select: { lastScannedAt: true },
+  })
+  if (lastScanned?.lastScannedAt && lastScanned.lastScannedAt > threeHoursAgo) {
+    const minutesLeft = Math.ceil((lastScanned.lastScannedAt.getTime() + 3 * 60 * 60 * 1000 - Date.now()) / 60000)
+    return NextResponse.json({
+      error: `Scan runs every 3 hours — next scan in ${minutesLeft} min`,
+      tooSoon: true,
+      nextScanIn: minutesLeft,
+    }, { status: 429 })
+  }
+
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
   const scansToday = await prisma.opportunity.count({
     where: { product: { userId: user.id }, createdAt: { gte: todayStart } },

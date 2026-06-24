@@ -143,6 +143,7 @@ model Opportunity {
   painType        PainType
   shouldPitch     Boolean  @default(true)
   scoringReasoning String? @db.Text
+  matchedKeywords  String[] @default([])
 
   // Status
   status          OpportunityStatus @default(QUEUED)

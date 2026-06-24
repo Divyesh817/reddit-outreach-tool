@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
   const profile = await scrapeProductProfile(url, html)
 
   // Discover subreddits
-  const suggestedSubreddits = await discoverSubreddits(profile)
+  const suggestedSubreddits = await discoverSubreddits({ ...profile, keywords: [] })
 
   // Create product
   const product = await prisma.product.create({

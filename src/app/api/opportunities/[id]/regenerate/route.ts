@@ -44,6 +44,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       keyBenefits: opportunity.product.keyBenefits,
       competitors: opportunity.product.competitors,
       summary: opportunity.product.summary,
+      keywords: opportunity.product.keywords,
     },
     opportunity.painType as PainType,
     opportunity.shouldPitch,

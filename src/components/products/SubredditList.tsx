@@ -15,6 +15,12 @@ interface Subreddit {
   isActive: boolean
 }
 
+interface Suggestion {
+  name: string
+  fitScore: number
+  fitReason: string
+}
+
 export function SubredditList({
   productId,
   subreddits: initial,
@@ -26,6 +32,9 @@ export function SubredditList({
   const [newName, setNewName] = useState('')
   const [loading, setLoading] = useState<string | null>(null)
   const [discovering, setDiscovering] = useState(false)
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([])
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false)
+  const [addingSuggestion, setAddingSuggestion] = useState<string | null>(null)
 
   async function addSubreddit() {
     if (!newName.trim()) return
@@ -64,6 +73,33 @@ export function SubredditList({
       setSubreddits(data)
     }
     setDiscovering(false)
+  }
+
+  async function loadSuggestions() {
+    if (loadingSuggestions) return
+    setLoadingSuggestions(true)
+    setSuggestions([])
+    const res = await fetch(`/api/products/${productId}/suggestions`)
+    if (res.ok) {
+      const { data } = await res.json()
+      setSuggestions(data ?? [])
+    }
+    setLoadingSuggestions(false)
+  }
+
+  async function addSuggestion(name: string) {
+    setAddingSuggestion(name)
+    const res = await fetch(`/api/products/${productId}/subreddits`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    })
+    if (res.ok) {
+      const { data } = await res.json()
+      setSubreddits(s => [...s, data])
+      setSuggestions(s => s.filter(sg => sg.name.toLowerCase() !== name.toLowerCase()))
+    }
+    setAddingSuggestion(null)
   }
 
   function fitPill(score: number) {
@@ -198,6 +234,83 @@ export function SubredditList({
             })}
           </div>
         )}
+
+        {/* Suggested subreddits */}
+        <div style={{ marginTop: 20, borderTop: `1px solid ${S.line}`, paddingTop: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: S.text4, textTransform: 'uppercase', letterSpacing: '.06em', fontFamily: 'JetBrains Mono, monospace' }}>
+              Suggested for you
+            </p>
+            <button
+              onClick={loadSuggestions}
+              disabled={loadingSuggestions}
+              style={{
+                fontSize: 13, fontWeight: 600, color: loadingSuggestions ? S.text4 : S.orange2,
+                background: 'none', border: 'none', cursor: loadingSuggestions ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit', padding: 0,
+              }}
+            >
+              {loadingSuggestions ? 'Finding…' : suggestions.length > 0 ? 'Refresh' : 'Find subreddits'}
+            </button>
+          </div>
+
+          {suggestions.length === 0 && !loadingSuggestions && (
+            <p style={{ fontSize: 14, color: S.text4, margin: 0 }}>
+              Click "Find subreddits" to get AI suggestions based on your product.
+            </p>
+          )}
+
+          {suggestions.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {suggestions.map(sg => {
+                const fit = fitPill(sg.fitScore)
+                return (
+                  <div
+                    key={sg.name}
+                    style={{
+                      display: 'flex', alignItems: 'flex-start', gap: 12,
+                      padding: '10px 14px', borderRadius: 10,
+                      background: S.panel2, border: `1px dashed ${S.line2}`,
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 15, fontWeight: 700, color: S.text3, fontFamily: 'JetBrains Mono, monospace' }}>
+                          r/{sg.name}
+                        </span>
+                        <span style={{
+                          fontSize: 12, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+                          color: fit.color, background: fit.bg, border: `1px solid ${fit.border}`,
+                          fontFamily: 'JetBrains Mono, monospace', textTransform: 'uppercase', letterSpacing: '.04em',
+                        }}>
+                          {fit.label}
+                        </span>
+                      </div>
+                      {sg.fitReason && (
+                        <p style={{ fontSize: 14, color: S.text4, margin: '3px 0 0', lineHeight: 1.5 }}>
+                          {sg.fitReason}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => addSuggestion(sg.name)}
+                      disabled={addingSuggestion === sg.name}
+                      style={{
+                        padding: '5px 12px', background: S.orangeSoft,
+                        border: `1px solid ${S.orangeLine}`, color: S.orange2,
+                        borderRadius: 6, fontSize: 13, fontWeight: 700,
+                        cursor: addingSuggestion === sg.name ? 'not-allowed' : 'pointer',
+                        fontFamily: 'inherit', flexShrink: 0,
+                      }}
+                    >
+                      {addingSuggestion === sg.name ? '…' : '+ Add'}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
