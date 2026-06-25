@@ -703,6 +703,6 @@ export const weeklySummary = inngest.createFunction(
 )
 
 export const functions = [
-  scanSubreddits, manualScan, postApprovedReplies, dailyWarmup,
+  /* scanSubreddits, */ manualScan, postApprovedReplies, dailyWarmup,
   weeklyGeoDigest, welcomeEmail, dailyDigest, weeklySummary,
 ]
