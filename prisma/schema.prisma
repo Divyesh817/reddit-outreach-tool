@@ -145,6 +145,9 @@ model Opportunity {
   scoringReasoning String? @db.Text
   matchedKeywords  String[] @default([])
 
+  // Competitor Spy
+  competitorMentioned String?  // which competitor was mentioned (e.g. "Replymer")
+
   // Status
   status          OpportunityStatus @default(QUEUED)
   reviewedAt      DateTime?

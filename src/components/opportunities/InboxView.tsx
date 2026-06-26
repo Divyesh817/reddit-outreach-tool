@@ -57,6 +57,7 @@ interface Opportunity {
   shouldPitch: boolean
   scoringReasoning: string | null
   matchedKeywords: string[]
+  competitorMentioned: string | null
   status: string
   topComments: string[]
   subreddit: { name: string; allowsPromotion: boolean; rulesScannedAt: string | null }
@@ -70,6 +71,7 @@ interface Props {
   productName: string
   products: { id: string; name: string }[]
   counts: { queued: number; posted: number; skipped: number }
+  plan: string
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -131,7 +133,7 @@ const INBOX_CSS = `
   .ib-open:hover svg { color:var(--c-orange2) }
 `
 
-export function InboxView({ opportunities: initial, initialStatus, productName, products, counts: initialCounts }: Props) {
+export function InboxView({ opportunities: initial, initialStatus, productName, products, counts: initialCounts, plan }: Props) {
   const router = useRouter()
 
   const [allOpps, setAllOpps] = useState(initial)
@@ -173,15 +175,22 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
   }
 
   // Derive opps + counts from allOpps to keep everything in sync after actions
+  const isPaid = plan !== 'FREE'
+
   // NO_PITCH leads show inline in the New tab with a karma tag
-  const opps = allOpps.filter(o =>
-    (activeStatus === 'QUEUED' ? (o.status === 'QUEUED' || o.status === 'NO_PITCH') : o.status === activeStatus) &&
-    (filterProductId === 'all' || o.product.id === filterProductId)
-  )
+  // COMPETITOR_SPY is a virtual tab — competitor-mentioned leads from any status
+  const spyOpps = allOpps.filter(o => o.competitorMentioned && (o.status === 'QUEUED' || o.status === 'NO_PITCH'))
+  const opps = activeStatus === 'COMPETITOR_SPY'
+    ? spyOpps.filter(o => filterProductId === 'all' || o.product.id === filterProductId)
+    : allOpps.filter(o =>
+        (activeStatus === 'QUEUED' ? (o.status === 'QUEUED' || o.status === 'NO_PITCH') : o.status === activeStatus) &&
+        (filterProductId === 'all' || o.product.id === filterProductId)
+      )
   const counts = {
     queued:  allOpps.filter(o => o.status === 'QUEUED' || o.status === 'NO_PITCH').length,
     posted:  allOpps.filter(o => o.status === 'POSTED').length,
     skipped: allOpps.filter(o => o.status === 'SKIPPED').length,
+    spy:     spyOpps.length,
   }
 
   const [selected, setSelected] = useState<Opportunity | null>(
@@ -207,9 +216,10 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
     : opps
 
   const tabCounts: Record<string, number> = {
-    QUEUED:  counts.queued,
-    POSTED:  counts.posted,
-    SKIPPED: counts.skipped,
+    QUEUED:          counts.queued,
+    POSTED:          counts.posted,
+    SKIPPED:         counts.skipped,
+    COMPETITOR_SPY:  counts.spy,
   }
 
   const selectedIndex = filtered.findIndex(o => o.id === selected?.id)
@@ -595,29 +605,36 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
             {/* Status tabs */}
             <div style={{ display: 'inline-flex', background: S.card, border: `1px solid ${S.line}`, borderRadius: 8, padding: 3, gap: 2 }}>
               {([
-                { key: 'QUEUED',  label: 'New' },
-                { key: 'POSTED',  label: 'Done' },
-                { key: 'SKIPPED', label: 'Dismissed' },
+                { key: 'QUEUED',         label: 'New',          spy: false },
+                { key: 'POSTED',         label: 'Done',         spy: false },
+                { key: 'SKIPPED',        label: 'Dismissed',    spy: false },
+                { key: 'COMPETITOR_SPY', label: '🕵️ Spy',       spy: true  },
               ] as const).map(tab => {
                 const active = activeStatus === tab.key
+                const isSpy = tab.spy
                 return (
                   <button key={tab.key} onClick={() => {
                     setActiveStatus(tab.key)
-                    setSelected(allOpps.filter(o => o.status === tab.key)[0] ?? null)
+                    setSelected(
+                      tab.key === 'COMPETITOR_SPY'
+                        ? (isPaid ? spyOpps[0] ?? null : null)
+                        : allOpps.filter(o => o.status === tab.key)[0] ?? null
+                    )
                     setSearch('')
                   }} style={{
                     padding: '7px 12px', fontSize: 14, borderRadius: 6, fontWeight: 500,
-                    color: active ? S.text : S.text3,
+                    color: active ? (isSpy ? '#f59e0b' : S.text) : S.text3,
                     background: active ? S.cardHover : 'transparent',
-                    border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                    border: isSpy && !active ? `1px dashed ${S.line2}` : 'none',
+                    cursor: 'pointer', fontFamily: 'inherit',
                     display: 'inline-flex', alignItems: 'center', gap: 6, transition: 'all .12s',
                   }}>
                     {tab.label}
                     <span style={{
                       fontFamily: 'JetBrains Mono, monospace', fontSize: 12,
                       padding: '2px 6px', borderRadius: 4,
-                      background: active ? S.orangeSoft : S.line,
-                      color:      active ? S.orange2    : S.text3,
+                      background: active ? (isSpy ? 'rgba(245,158,11,.15)' : S.orangeSoft) : S.line,
+                      color:      active ? (isSpy ? '#f59e0b' : S.orange2) : S.text3,
                     }}>
                       {tabCounts[tab.key] ?? 0}
                     </span>
@@ -643,8 +660,69 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
             </div>
           </div>
 
+          {/* Spy tab paywall for free users */}
+          {activeStatus === 'COMPETITOR_SPY' && !isPaid && (
+            <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
+              {/* Blurred preview of leads */}
+              <div style={{ filter: 'blur(5px)', pointerEvents: 'none', padding: '8px 0', opacity: 0.6 }}>
+                {(spyOpps.length > 0 ? spyOpps : [{
+                  id: 'preview-1', redditPostTitle: 'We finally dropped Loom after 2 years — here\'s what happened',
+                  intentScore: 88, painType: 'switching_intent', competitorMentioned: 'Loom',
+                  subreddit: { name: 'SaaS' }, redditPostedAt: new Date().toISOString(),
+                }] as any[]).slice(0, 3).map((opp: any, i: number) => (
+                  <div key={i} style={{
+                    display: 'flex', flexDirection: 'column', gap: 6, padding: '14px 16px',
+                    borderBottom: `1px solid ${S.line}`,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ padding: '3px 8px', borderRadius: 5, background: 'rgba(245,158,11,.15)', color: '#f59e0b', fontSize: 12, fontWeight: 600 }}>
+                        🎯 {opp.competitorMentioned ?? 'Competitor'}
+                      </span>
+                      <span style={{ padding: '3px 8px', borderRadius: 5, background: S.orangeSoft, color: S.orange2, fontSize: 12, fontWeight: 600 }}>
+                        {opp.intentScore}%
+                      </span>
+                    </div>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: S.text, lineHeight: 1.4 }}>
+                      {opp.redditPostTitle}
+                    </p>
+                    <p style={{ margin: 0, fontSize: 13, color: S.text4 }}>r/{opp.subreddit?.name} · just now</p>
+                  </div>
+                ))}
+              </div>
+              {/* Upgrade overlay */}
+              <div style={{
+                position: 'absolute', inset: 0,
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                background: 'rgba(16,12,8,.7)', backdropFilter: 'blur(2px)',
+                gap: 16, padding: 32, textAlign: 'center',
+              }}>
+                <div style={{ fontSize: 32 }}>🕵️</div>
+                <div>
+                  <p style={{ margin: '0 0 6px', fontSize: 17, fontWeight: 700, color: S.text }}>
+                    Competitor Spy is a paid feature
+                  </p>
+                  <p style={{ margin: 0, fontSize: 14, color: S.text3, maxWidth: 280 }}>
+                    See every Reddit thread where people are venting about your competitors — and get there first.
+                  </p>
+                </div>
+                {counts.spy > 0 && (
+                  <p style={{ margin: 0, fontSize: 13, color: '#f59e0b', fontWeight: 600 }}>
+                    {counts.spy} competitor thread{counts.spy !== 1 ? 's' : ''} found this week — upgrade to read them
+                  </p>
+                )}
+                <a href="/settings?tab=billing" style={{
+                  display: 'inline-block', padding: '10px 24px', borderRadius: 8,
+                  background: S.orange, color: '#fff', fontWeight: 700, fontSize: 15,
+                  textDecoration: 'none', transition: 'opacity .15s',
+                }}>
+                  Upgrade to Starter →
+                </a>
+              </div>
+            </div>
+          )}
+
           {/* Thread list */}
-          <div className="ib-scroll" style={{ flex: 1, overflowY: 'auto' }}>
+          <div className="ib-scroll" style={{ flex: 1, overflowY: 'auto', display: activeStatus === 'COMPETITOR_SPY' && !isPaid ? 'none' : undefined }}>
             {filtered.length === 0 ? (
               <div style={{ padding: '48px 24px', textAlign: 'center' }}>
                 <div style={{ width: 44, height: 44, borderRadius: 11, background: S.card, border: `1px solid ${S.line2}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
@@ -680,8 +758,17 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
                       borderRadius: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em',
                       color: pain.text, background: pain.bg, flexShrink: 0,
                     }}>
-                      {pain.label}
+                      {opp.status === 'NO_PITCH' ? 'Karma' : pain.label}
                     </span>
+                    {opp.competitorMentioned && (
+                      <span style={{
+                        fontFamily: 'JetBrains Mono, monospace', fontSize: 11, padding: '3px 8px',
+                        borderRadius: 4, fontWeight: 600, flexShrink: 0,
+                        background: 'rgba(245,158,11,.12)', color: '#f59e0b',
+                      }}>
+                        🎯 {opp.competitorMentioned}
+                      </span>
+                    )}
                     <span style={{
                       marginLeft: 'auto', fontFamily: 'JetBrains Mono, monospace',
                       fontSize: 12, fontWeight: 700, padding: '3px 8px', borderRadius: 4,

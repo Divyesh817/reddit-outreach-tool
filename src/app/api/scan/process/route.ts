@@ -22,6 +22,22 @@ const HIGH_INTENT_PATTERNS = [
 const MIN_INTENT_SCORE = 65
 const MIN_INTENT_SCORE_WITH_SIGNAL = 55
 
+const SWITCHING_PATTERNS = [
+  'leaving', 'cancelling', 'canceled', 'cancelled', 'switching from',
+  'alternative to', 'replace', 'instead of', 'moved from', 'dropped',
+  'ditching', 'migrating from', 'looking for alternative',
+]
+
+function detectCompetitorMentioned(text: string, competitors: string[]): string | null {
+  const lower = text.toLowerCase()
+  return competitors.find(c => c && lower.includes(c.toLowerCase())) ?? null
+}
+
+function hasSwitchingIntent(text: string): boolean {
+  const lower = text.toLowerCase()
+  return SWITCHING_PATTERNS.some(p => lower.includes(p))
+}
+
 interface RawThread {
   id: string
   title: string
@@ -131,13 +147,16 @@ export async function POST(req: Request) {
       const scoring = scores[i]
       if (!scoring) continue
 
-      const threadText = `${thread.title} ${thread.selftext}`.toLowerCase()
-      const hasDirectSignal =
-        (scoring.matchedKeywords?.length ?? 0) > 0 ||
-        profile.competitors.some(c => c && threadText.includes(c.toLowerCase()))
+      const threadText = `${thread.title} ${thread.selftext}`
+      const competitorMentioned = detectCompetitorMentioned(threadText, profile.competitors)
+      const isCompetitorThread = competitorMentioned !== null
+      const isSwitching = isCompetitorThread && hasSwitchingIntent(threadText)
 
-      const effectiveMin = hasDirectSignal ? MIN_INTENT_SCORE_WITH_SIGNAL : MIN_INTENT_SCORE
-      const isKarmaLead = scoring.intentScore >= 50 && !scoring.shouldPitch
+      const hasDirectSignal = (scoring.matchedKeywords?.length ?? 0) > 0 || isCompetitorThread
+      // Competitor threads qualify at a lower bar — someone venting about a competitor
+      // is high-value even if Claude scores it lower
+      const effectiveMin = isCompetitorThread ? 40 : hasDirectSignal ? MIN_INTENT_SCORE_WITH_SIGNAL : MIN_INTENT_SCORE
+      const isKarmaLead = scoring.intentScore >= 50 && !scoring.shouldPitch && !isCompetitorThread
 
       if (scoring.intentScore < effectiveMin && !isKarmaLead) continue
 
@@ -160,7 +179,9 @@ export async function POST(req: Request) {
             shouldPitch: scoring.shouldPitch,
             scoringReasoning: scoring.reasoning,
             matchedKeywords: scoring.matchedKeywords ?? [],
+            competitorMentioned,
             status: isKarmaLead ? 'NO_PITCH' : 'QUEUED',
+            ...(isSwitching && { painType: 'switching_intent' }),
           }
         })
         intentScoreSum += scoring.intentScore

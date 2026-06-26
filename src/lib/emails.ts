@@ -191,3 +191,50 @@ export async function sendWeeklySummary(to: string, name: string | null, stats: 
     html,
   })
 }
+
+// ─── 5. Competitor Spy digest ─────────────────────────────────────────────────
+
+export async function sendCompetitorDigest(to: string, name: string | null, threads: {
+  competitor: string
+  postTitle: string
+  subreddit: string
+  postUrl: string
+  intentScore: number
+  isSwitching: boolean
+}[]) {
+  const firstName = name?.split(' ')[0] ?? 'there'
+
+  const items = threads.map(t => `
+    <div style="background:#fff;border:1px solid #ede9e3;border-radius:10px;padding:16px 20px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span style="background:rgba(245,158,11,.12);color:#d97706;font-size:12px;font-weight:700;padding:3px 8px;border-radius:4px">
+          🎯 ${t.competitor}
+        </span>
+        ${t.isSwitching ? '<span style="background:#fff0f0;color:#e54b1b;font-size:12px;font-weight:700;padding:3px 8px;border-radius:4px">SWITCHING</span>' : ''}
+        <span style="margin-left:auto;font-size:12px;font-weight:700;color:#888">${t.intentScore}%</span>
+      </div>
+      <div style="font-size:15px;font-weight:600;color:#1a1a1a;line-height:1.4;margin-bottom:6px">${t.postTitle}</div>
+      <div style="font-size:13px;color:#999">r/${t.subreddit}</div>
+      <a href="${t.postUrl}" style="display:inline-block;margin-top:10px;font-size:13px;font-weight:600;color:#E54B1B">View thread →</a>
+    </div>
+  `).join('')
+
+  const html = base(`
+    <p style="font-size:20px;font-weight:700;letter-spacing:-.02em;margin:0 0 6px">Competitor activity, ${firstName} 🕵️</p>
+    <p style="font-size:15px;color:#888;margin:0 0 28px">
+      ${threads.length} thread${threads.length !== 1 ? 's' : ''} mentioning your competitors in the last 48 hours.
+      ${threads.filter(t => t.isSwitching).length > 0 ? `<strong style="color:#E54B1B">${threads.filter(t => t.isSwitching).length} switching intent</strong> — reply fast.` : ''}
+    </p>
+    ${items}
+    <a href="${APP_URL}/opportunities?status=COMPETITOR_SPY" style="display:inline-block;margin-top:8px;padding:13px 26px;background:#E54B1B;color:#fff;border-radius:9px;font-size:15px;font-weight:700">
+      Open Competitor Spy →
+    </a>
+  `)
+
+  return resend.emails.send({
+    from: FROM,
+    to,
+    subject: `🕵️ ${threads.length} competitor mention${threads.length !== 1 ? 's' : ''} on Reddit — reply first`,
+    html,
+  })
+}

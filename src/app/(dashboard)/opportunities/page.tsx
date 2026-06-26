@@ -15,6 +15,9 @@ export default async function OpportunitiesPage({
   const userId = user.id
   const initialStatus = (searchParams.status || 'QUEUED') as string
 
+  const dbUser = await prisma.user.findUnique({ where: { id: userId }, select: { plan: true } })
+  const plan = dbUser?.plan ?? 'FREE'
+
   const [products, allOpportunities] = await Promise.all([
     prisma.product.findMany({
       where: { userId, isActive: true },
@@ -37,6 +40,7 @@ export default async function OpportunitiesPage({
         },
         product: { select: { id: true, name: true } },
       },
+      // include competitorMentioned in the select (it's on the model root)
     }),
   ])
 
@@ -54,6 +58,7 @@ export default async function OpportunitiesPage({
         productName={products[0]?.name ?? 'Your product'}
         products={products}
         counts={counts}
+        plan={plan}
       />
     </div>
   )

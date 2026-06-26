@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { fetchNewThreads, checkDailyPostingLimit, checkSubredditCooldown,
          checkCommentVisible, postReply } from '@/lib/reddit'
 import { batchScoreOpportunities, generateReply, generateWarmupComment, runGeoAnalysis } from '@/lib/anthropic'
-import { sendWelcomeEmail, sendHighIntentAlert, sendDailyDigest, sendWeeklySummary } from '@/lib/emails'
+import { sendWelcomeEmail, sendHighIntentAlert, sendDailyDigest, sendWeeklySummary, sendCompetitorDigest } from '@/lib/emails'
 import type { ProductProfile } from '@/types'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
@@ -24,6 +24,22 @@ const HIGH_INTENT_PATTERNS = [
   'workflow', 'automate', 'struggling', 'issue with', 'problem with',
   "can't stand", 'hate', 'disappointed', 'not working', 'alternatives',
 ]
+
+const SWITCHING_PATTERNS = [
+  'leaving', 'cancelling', 'canceled', 'cancelled', 'switching from',
+  'alternative to', 'replace', 'instead of', 'moved from', 'dropped',
+  'ditching', 'migrating from', 'looking for alternative',
+]
+
+function detectCompetitorMentioned(text: string, competitors: string[]): string | null {
+  const lower = text.toLowerCase()
+  return competitors.find(c => c && lower.includes(c.toLowerCase())) ?? null
+}
+
+function hasSwitchingIntent(text: string): boolean {
+  const lower = text.toLowerCase()
+  return SWITCHING_PATTERNS.some(p => lower.includes(p))
+}
 
 function decodeXml(s: string) {
   return s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
@@ -176,13 +192,17 @@ async function scanSubredditForProduct(
     const scoring = scores[i]
     if (!scoring) continue
 
+    const threadText = `${threadsWithComments[i].title} ${threadsWithComments[i].body}`
+    const competitorMentioned = detectCompetitorMentioned(threadText, profile.competitors)
+    const isCompetitorThread = competitorMentioned !== null
+    const isSwitching = isCompetitorThread && hasSwitchingIntent(threadText)
+
     // Lower the bar if the thread directly matched a product keyword or competitor
-    const hasDirectSignal = (scoring.matchedKeywords?.length ?? 0) > 0 ||
-      profile.competitors.some(c => c && `${threadsWithComments[i].title} ${threadsWithComments[i].body}`.toLowerCase().includes(c.toLowerCase()))
-    const effectiveMin = hasDirectSignal ? MIN_INTENT_SCORE_WITH_SIGNAL : MIN_INTENT_SCORE
+    const hasDirectSignal = (scoring.matchedKeywords?.length ?? 0) > 0 || isCompetitorThread
+    const effectiveMin = isCompetitorThread ? 40 : hasDirectSignal ? MIN_INTENT_SCORE_WITH_SIGNAL : MIN_INTENT_SCORE
 
     // Karma-worthy: relevant topic but not pitch-worthy — save as NO_PITCH for engagement ratio
-    const isKarmaLead = scoring.intentScore >= 50 && !scoring.shouldPitch
+    const isKarmaLead = scoring.intentScore >= 50 && !scoring.shouldPitch && !isCompetitorThread
     // Skip anything below effective threshold
     if (scoring.intentScore < effectiveMin && !isKarmaLead) continue
 
@@ -201,23 +221,25 @@ async function scanSubredditForProduct(
           redditCommentCount: thread.num_comments,
           redditPostedAt: new Date(thread.created_utc * 1000),
           intentScore: scoring.intentScore,
-          painType: scoring.painType,
+          painType: isSwitching ? 'switching_intent' : scoring.painType,
           shouldPitch: scoring.shouldPitch,
           scoringReasoning: scoring.reasoning,
           matchedKeywords: scoring.matchedKeywords ?? [],
+          competitorMentioned,
           status: isKarmaLead ? 'NO_PITCH' : 'QUEUED',
         }
       })
 
-      // Alert for high-intent leads (score >= 80)
-      if (scoring.intentScore >= 80) {
+      // Alert for high-intent leads (score >= 80) OR switching-intent competitor threads
+      if (scoring.intentScore >= 80 || isSwitching) {
         try {
           const owner = await prisma.user.findUnique({
             where: { id: product.userId },
-            select: { email: true, notificationPrefs: true },
+            select: { email: true, notificationPrefs: true, plan: true },
           })
           const prefs = (owner?.notificationPrefs as any) ?? {}
-          if (owner?.email && prefs.highIntent !== false) {
+          const isPaid = owner?.plan && owner.plan !== 'FREE'
+          if (owner?.email && prefs.highIntent !== false && (scoring.intentScore >= 80 || (isSwitching && isPaid))) {
             await sendHighIntentAlert(owner.email, {
               productName: product.name,
               postTitle: thread.title,
@@ -641,7 +663,64 @@ export const dailyDigest = inngest.createFunction(
   }
 )
 
-// ─── Job 9: Weekly summary — Monday 8am UTC ───────────────────────────────────
+// ─── Job 9: Competitor spy digest — every 2 days, paid users only ────────────
+
+export const competitorDigest = inngest.createFunction(
+  { id: 'competitor-digest' },
+  { cron: '0 8 */2 * *' },
+  async ({ step }) => {
+    const users = await step.run('fetch-paid-users', () =>
+      prisma.user.findMany({
+        where: { email: { not: '' }, plan: { not: 'FREE' } },
+        select: { id: true, email: true, name: true, notificationPrefs: true },
+      })
+    )
+
+    const since = new Date(Date.now() - 48 * 60 * 60 * 1000)
+    let sent = 0
+
+    for (const user of users) {
+      const prefs = (user.notificationPrefs as any) ?? {}
+      if (prefs.competitorDigest === false) continue
+
+      await step.run(`competitor-digest-${user.id}`, async () => {
+        const threads = await prisma.opportunity.findMany({
+          where: {
+            product: { userId: user.id },
+            createdAt: { gte: since },
+            competitorMentioned: { not: null },
+            status: { in: ['QUEUED', 'NO_PITCH'] },
+          },
+          orderBy: { intentScore: 'desc' },
+          take: 8,
+          include: { subreddit: { select: { name: true } } },
+        })
+
+        if (threads.length === 0) return
+
+        const SWITCHING = ['leaving','cancelling','canceled','cancelled','switching from','alternative to','replace','instead of','moved from','dropped','ditching']
+
+        await sendCompetitorDigest(
+          user.email!,
+          user.name,
+          threads.map(t => ({
+            competitor: t.competitorMentioned!,
+            postTitle: t.redditPostTitle,
+            subreddit: t.subreddit.name,
+            postUrl: t.redditPostUrl,
+            intentScore: t.intentScore,
+            isSwitching: SWITCHING.some(p => `${t.redditPostTitle} ${t.redditPostBody ?? ''}`.toLowerCase().includes(p)),
+          }))
+        )
+        sent++
+      })
+    }
+
+    return { sent }
+  }
+)
+
+// ─── Job 10: Weekly summary — Monday 8am UTC ──────────────────────────────────
 
 export const weeklySummary = inngest.createFunction(
   { id: 'weekly-summary' },
@@ -704,5 +783,5 @@ export const weeklySummary = inngest.createFunction(
 
 export const functions = [
   /* scanSubreddits, */ manualScan, postApprovedReplies, dailyWarmup,
-  weeklyGeoDigest, welcomeEmail, dailyDigest, weeklySummary,
+  weeklyGeoDigest, welcomeEmail, dailyDigest, weeklySummary, competitorDigest,
 ]
