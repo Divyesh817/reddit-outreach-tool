@@ -6,7 +6,7 @@ import { InboxView } from '@/components/opportunities/InboxView'
 export default async function OpportunitiesPage({
   searchParams,
 }: {
-  searchParams: { status?: string; page?: string }
+  searchParams: { status?: string; page?: string; product?: string }
 }) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -14,19 +14,26 @@ export default async function OpportunitiesPage({
 
   const userId = user.id
   const initialStatus = (searchParams.status || 'QUEUED') as string
+  const activeProductId = searchParams.product
 
   const dbUser = await prisma.user.findUnique({ where: { id: userId }, select: { plan: true } })
   const plan = dbUser?.plan ?? 'FREE'
 
+  const oppWhere = activeProductId
+    ? { productId: activeProductId, product: { userId } }
+    : { product: { userId } }
+
   const [products, allOpportunities] = await Promise.all([
     prisma.product.findMany({
-      where: { userId, isActive: true },
+      where: activeProductId
+        ? { id: activeProductId, userId, isActive: true }
+        : { userId, isActive: true },
       select: { id: true, name: true },
       orderBy: { createdAt: 'asc' },
     }),
     prisma.opportunity.findMany({
       where: {
-        product: { userId },
+        ...oppWhere,
         redditPostedAt: { gte: new Date(Date.now() - 21 * 24 * 60 * 60 * 1000) },
       },
       orderBy: { intentScore: 'desc' },
@@ -59,6 +66,7 @@ export default async function OpportunitiesPage({
         products={products}
         counts={counts}
         plan={plan}
+        activeProductId={activeProductId}
       />
     </div>
   )

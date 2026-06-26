@@ -94,6 +94,7 @@ interface Props {
   products: { id: string; name: string }[]
   counts: { queued: number; posted: number; skipped: number }
   plan: string
+  activeProductId?: string
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -155,7 +156,7 @@ const INBOX_CSS = `
   .ib-open:hover svg { color:var(--c-orange2) }
 `
 
-export function InboxView({ opportunities: initial, initialStatus, productName, products, counts: initialCounts, plan }: Props) {
+export function InboxView({ opportunities: initial, initialStatus, productName, products, counts: initialCounts, plan, activeProductId }: Props) {
   const router = useRouter()
 
   const [allOpps, setAllOpps] = useState(initial)
@@ -392,7 +393,11 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
     setScanning(true); setScanMsg('')
     try {
       // Step 1: get subreddits to scan from server
-      const prepRes = await fetch('/api/scan', { method: 'POST' })
+      const prepRes = await fetch('/api/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(activeProductId ? { productId: activeProductId } : {}),
+      })
       const prep = await prepRes.json().catch(() => ({}))
 
       if (prep.error && !prep.subreddits) {

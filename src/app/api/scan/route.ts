@@ -8,10 +8,13 @@ import type { Plan } from '@/types'
 
 // Returns the list of subreddits + product profiles for the client to fetch Reddit threads.
 // Reddit fetching happens client-side (browser IPs) to avoid Vercel IP blocks.
-export async function POST() {
+export async function POST(req: Request) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const body = await req.json().catch(() => ({}))
+  const productId: string | undefined = body.productId || undefined
 
   const dbUser = await prisma.user.findUnique({ where: { id: user.id }, select: { plan: true } })
   const plan = (dbUser?.plan ?? 'FREE') as Plan
@@ -57,7 +60,9 @@ export async function POST() {
   }
 
   const products = await prisma.product.findMany({
-    where: { userId: user.id, isActive: true },
+    where: productId
+      ? { id: productId, userId: user.id, isActive: true }
+      : { userId: user.id, isActive: true },
     include: {
       subreddits: {
         where: { isActive: true, isBlacklisted: false },
