@@ -603,12 +603,12 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
             )}
 
             {/* Status tabs */}
-            <div style={{ display: 'inline-flex', background: S.card, border: `1px solid ${S.line}`, borderRadius: 8, padding: 3, gap: 2 }}>
+            <div style={{ display: 'flex', background: S.card, border: `1px solid ${S.line}`, borderRadius: 8, padding: 3, gap: 2, width: '100%' }}>
               {([
-                { key: 'QUEUED',         label: 'New',          spy: false },
-                { key: 'POSTED',         label: 'Done',         spy: false },
-                { key: 'SKIPPED',        label: 'Dismissed',    spy: false },
-                { key: 'COMPETITOR_SPY', label: '🕵️ Spy',       spy: true  },
+                { key: 'QUEUED',         label: 'New',    spy: false },
+                { key: 'POSTED',         label: 'Done',   spy: false },
+                { key: 'SKIPPED',        label: 'Skipped', spy: false },
+                { key: 'COMPETITOR_SPY', label: '🕵️ Spy', spy: true  },
               ] as const).map(tab => {
                 const active = activeStatus === tab.key
                 const isSpy = tab.spy
@@ -622,12 +622,12 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
                     )
                     setSearch('')
                   }} style={{
-                    padding: '7px 12px', fontSize: 14, borderRadius: 6, fontWeight: 500,
+                    flex: 1, padding: '7px 8px', fontSize: 13, borderRadius: 6, fontWeight: 500,
                     color: active ? (isSpy ? '#f59e0b' : S.text) : S.text3,
                     background: active ? S.cardHover : 'transparent',
                     border: isSpy && !active ? `1px dashed ${S.line2}` : 'none',
                     cursor: 'pointer', fontFamily: 'inherit',
-                    display: 'inline-flex', alignItems: 'center', gap: 6, transition: 'all .12s',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'all .12s',
                   }}>
                     {tab.label}
                     <span style={{
