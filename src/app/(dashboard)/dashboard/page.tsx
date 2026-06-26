@@ -3,19 +3,27 @@ import { prisma } from '@/lib/prisma'
 import { redirect } from 'next/navigation'
 import { DashboardContent } from '@/components/dashboard/DashboardContent'
 
-async function getDashboardData(userId: string) {
+async function getDashboardData(userId: string, productId?: string) {
   const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7)
+
+  // When a specific product is selected, scope all queries to it
+  const oppWhere = productId
+    ? { productId, product: { userId } }
+    : { product: { userId } }
+  const subWhere = productId
+    ? { productId, product: { userId } }
+    : { product: { userId } }
 
   const [
     queued, posted, weekOpps,
     products, recentOpps, topSubreddits, painBreakdown, avgIntent,
   ] = await Promise.all([
-    prisma.opportunity.count({ where: { product: { userId }, status: 'QUEUED' } }),
-    prisma.postedReply.count({ where: { opportunity: { product: { userId } } } }),
-    prisma.opportunity.count({ where: { product: { userId }, createdAt: { gte: weekAgo } } }),
+    prisma.opportunity.count({ where: { ...oppWhere, status: 'QUEUED' } }),
+    prisma.postedReply.count({ where: { opportunity: { ...oppWhere } } }),
+    prisma.opportunity.count({ where: { ...oppWhere, createdAt: { gte: weekAgo } } }),
     prisma.product.findMany({ where: { userId, isActive: true }, select: { id: true, name: true }, orderBy: { createdAt: 'asc' } }),
     prisma.opportunity.findMany({
-      where: { product: { userId }, status: 'QUEUED' },
+      where: { ...oppWhere, status: 'QUEUED' },
       orderBy: { intentScore: 'desc' },
       take: 6,
       select: {
@@ -26,20 +34,20 @@ async function getDashboardData(userId: string) {
       },
     }),
     prisma.subreddit.findMany({
-      where: { product: { userId } },
+      where: subWhere,
       orderBy: { opportunities: { _count: 'desc' } },
       take: 4,
       select: { name: true, _count: { select: { opportunities: true } } },
     }),
     prisma.opportunity.groupBy({
       by: ['painType'],
-      where: { product: { userId } },
+      where: oppWhere,
       _count: { id: true },
       orderBy: { _count: { id: 'desc' } },
       take: 5,
     }),
     prisma.opportunity.aggregate({
-      where: { product: { userId }, createdAt: { gte: weekAgo } },
+      where: { ...oppWhere, createdAt: { gte: weekAgo } },
       _avg: { intentScore: true },
     }),
   ])
@@ -50,7 +58,7 @@ async function getDashboardData(userId: string) {
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: { payment?: string; plan?: string }
+  searchParams: { payment?: string; plan?: string; product?: string }
 }) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -66,7 +74,7 @@ export default async function DashboardPage({
   }
 
   const firstName = user.user_metadata?.full_name?.split(' ')[0] ?? user.email?.split('@')[0] ?? 'there'
-  const { queued, posted, weekOpps, products, recentOpps, topSubreddits, painBreakdown, avgIntent } = await getDashboardData(userId)
+  const { queued, posted, weekOpps, products, recentOpps, topSubreddits, painBreakdown, avgIntent } = await getDashboardData(userId, searchParams.product)
   const hour = new Date().getHours()
   const avg = Math.round(avgIntent._avg.intentScore ?? 0)
   const hasProduct = products.length > 0

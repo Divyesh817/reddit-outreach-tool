@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { S, DARK_VARS, LIGHT_VARS } from '@/lib/theme'
@@ -29,6 +29,8 @@ function getPageKey(pathname: string) {
 export function DashboardShell({ user, products, children, opportunityCount = 0, repliesThisMonth = 0 }: Props) {
   const pathname = usePathname()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const activeProductId = searchParams.get('product')
   const [pendingHref, setPendingHref] = useState<string | null>(null)
   const [signingOut, setSigningOut] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
@@ -36,7 +38,8 @@ export function DashboardShell({ user, products, children, opportunityCount = 0,
   const [productsOpen, setProductsOpen] = useState(false)
   const { lang, setLang } = useLanguage()
   const t = useT()
-  const product = products[0]
+  const product = (activeProductId ? products.find(p => p.id === activeProductId) : null) ?? products[0]
+  const otherProducts = products.filter(p => p.id !== product?.id)
   const initials = (user.name || user.email).slice(0, 2).toUpperCase()
 
   const PAGE_LABEL_KEYS: Record<string, string> = {
@@ -154,11 +157,11 @@ export function DashboardShell({ user, products, children, opportunityCount = 0,
           {/* Expanded product list */}
           {productsOpen && (
             <div style={{ borderTop: `1px solid ${S.line}`, padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 3 }}>
-              {/* Existing products — skip index 0 since it's already shown in the trigger */}
-              {products.slice(1).map((p) => (
+              {otherProducts.map((p) => (
                 <Link
                   key={p.id}
-                  href={`/products/${p.id}`}
+                  href={`/dashboard?product=${p.id}`}
+                  onClick={() => setProductsOpen(false)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 9,
                     padding: '7px 8px', borderRadius: 7, textDecoration: 'none',
