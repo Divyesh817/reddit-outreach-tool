@@ -503,15 +503,12 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
       const searches: { competitor: string; productId: string }[] = prep.searches ?? []
       setSpyMsg(`Searching Reddit for ${searches.length} competitor${searches.length !== 1 ? 's' : ''}…`)
 
-      // Step 2: client-side Reddit search for each competitor (browser IPs)
-      const UA = 'Feedly/1.0 (+https://feedly.com/fetcher.html; like FeedFetcher-Google)'
+      // Step 2: server-side Reddit search via proxy (avoids CORS)
       const fetchResults = await Promise.allSettled(
         searches.map(async ({ competitor, productId }) => {
-          const url = `https://www.reddit.com/search.json?q=${encodeURIComponent(`"${competitor}"`)}&sort=new&t=week&limit=25&type=link`
-          const res = await fetch(url, { headers: { 'User-Agent': UA } })
-          const data = await res.json().catch(() => ({ data: { children: [] } }))
-          const threads = (data?.data?.children ?? []).map((c: any) => c.data)
-          return { competitor, productId, threads }
+          const res = await fetch(`/api/reddit/search?q=${encodeURIComponent(competitor)}`)
+          const data = await res.json().catch(() => ({ threads: [] }))
+          return { competitor, productId, threads: data.threads ?? [] }
         })
       )
 
