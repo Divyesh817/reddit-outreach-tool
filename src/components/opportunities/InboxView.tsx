@@ -35,6 +35,28 @@ function wordCount(text: string) {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface SpyResult {
+  id: string
+  competitor: string
+  redditPostId: string
+  redditPostUrl: string
+  redditPostTitle: string
+  redditPostBody: string | null
+  redditAuthor: string
+  redditScore: number
+  redditCommentCount: number
+  redditPostedAt: string
+  subredditName: string
+  status: string
+  product: { name: string }
+}
+
+const SWITCHING_WORDS = ['leaving','cancelling','canceled','cancelled','switching from','alternative to','replace','instead of','moved from','dropped','ditching','migrating from']
+function isSwitching(result: SpyResult) {
+  const text = `${result.redditPostTitle} ${result.redditPostBody ?? ''}`.toLowerCase()
+  return SWITCHING_WORDS.some(w => text.includes(w))
+}
+
 interface Reply {
   id: string
   text: string
@@ -151,6 +173,13 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
   const [commentsError, setCommentsError] = useState('')
   const [commentReplies, setCommentReplies] = useState<Record<number, { text: string; whyThisWorks: string; loading: boolean; copied: boolean }>>({})
 
+  // Competitor spy state
+  const [spyResults, setSpyResults] = useState<SpyResult[]>([])
+  const [spyScanning, setSpyScanning] = useState(false)
+  const [spyMsg, setSpyMsg] = useState('')
+  const [selectedSpy, setSelectedSpy] = useState<SpyResult | null>(null)
+  const [spyLoaded, setSpyLoaded] = useState(false)
+
   async function generateCommentReply(commentIndex: number, comment: { author: string; body: string }) {
     if (!selected) return
     setCommentReplies(prev => ({ ...prev, [commentIndex]: { text: '', whyThisWorks: '', loading: true, copied: false } }))
@@ -179,9 +208,8 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
 
   // NO_PITCH leads show inline in the New tab with a karma tag
   // COMPETITOR_SPY is a virtual tab — competitor-mentioned leads from any status
-  const spyOpps = allOpps.filter(o => o.competitorMentioned && (o.status === 'QUEUED' || o.status === 'NO_PITCH'))
   const opps = activeStatus === 'COMPETITOR_SPY'
-    ? spyOpps.filter(o => filterProductId === 'all' || o.product.id === filterProductId)
+    ? []
     : allOpps.filter(o =>
         (activeStatus === 'QUEUED' ? (o.status === 'QUEUED' || o.status === 'NO_PITCH') : o.status === activeStatus) &&
         (filterProductId === 'all' || o.product.id === filterProductId)
@@ -190,7 +218,7 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
     queued:  allOpps.filter(o => o.status === 'QUEUED' || o.status === 'NO_PITCH').length,
     posted:  allOpps.filter(o => o.status === 'POSTED').length,
     skipped: allOpps.filter(o => o.status === 'SKIPPED').length,
-    spy:     spyOpps.length,
+    spy:     spyResults.length,
   }
 
   const [selected, setSelected] = useState<Opportunity | null>(
@@ -446,6 +474,80 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
     setScanning(false)
   }
 
+  // ─── Spy scan ────────────────────────────────────────────────────────────
+
+  async function loadSpyResults() {
+    const res = await fetch('/api/spy/results')
+    const data = await res.json().catch(() => ({}))
+    if (data.results) {
+      setSpyResults(data.results)
+      if (!selectedSpy && data.results.length > 0) setSelectedSpy(data.results[0])
+    }
+    setSpyLoaded(true)
+  }
+
+  async function handleSpyScan() {
+    setSpyScanning(true); setSpyMsg('')
+    try {
+      // Step 1: validate + get competitors list
+      const prepRes = await fetch('/api/spy/prep', { method: 'POST' })
+      const prep = await prepRes.json().catch(() => ({}))
+
+      if (prep.error) {
+        setSpyMsg(prep.tooSoon ? `Next spy scan in ${prep.nextScanIn} min` : prep.error)
+        setTimeout(() => setSpyMsg(''), 8000)
+        setSpyScanning(false)
+        return
+      }
+
+      const searches: { competitor: string; productId: string }[] = prep.searches ?? []
+      setSpyMsg(`Searching Reddit for ${searches.length} competitor${searches.length !== 1 ? 's' : ''}…`)
+
+      // Step 2: client-side Reddit search for each competitor (browser IPs)
+      const UA = 'Feedly/1.0 (+https://feedly.com/fetcher.html; like FeedFetcher-Google)'
+      const fetchResults = await Promise.allSettled(
+        searches.map(async ({ competitor, productId }) => {
+          const url = `https://www.reddit.com/search.json?q=${encodeURIComponent(`"${competitor}"`)}&sort=new&t=week&limit=25&type=link`
+          const res = await fetch(url, { headers: { 'User-Agent': UA } })
+          const data = await res.json().catch(() => ({ data: { children: [] } }))
+          const threads = (data?.data?.children ?? []).map((c: any) => c.data)
+          return { competitor, productId, threads }
+        })
+      )
+
+      const batches = fetchResults
+        .filter(r => r.status === 'fulfilled')
+        .map(r => (r as PromiseFulfilledResult<any>).value)
+
+      const totalFetched = batches.reduce((s: number, b: any) => s + b.threads.length, 0)
+      if (!totalFetched) {
+        setSpyMsg('Could not reach Reddit — try again')
+        setTimeout(() => setSpyMsg(''), 6000)
+        setSpyScanning(false)
+        return
+      }
+
+      // Step 3: save to DB
+      const processRes = await fetch('/api/spy/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batches }),
+      })
+      const result = await processRes.json().catch(() => ({}))
+      const created = result.created ?? 0
+
+      setSpyMsg(`Found ${created} new thread${created !== 1 ? 's' : ''} mentioning your competitors`)
+      setTimeout(() => setSpyMsg(''), 8000)
+
+      // Reload results
+      await loadSpyResults()
+    } catch {
+      setSpyMsg('Spy scan failed — try again')
+      setTimeout(() => setSpyMsg(''), 5000)
+    }
+    setSpyScanning(false)
+  }
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -615,9 +717,9 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
                 return (
                   <button key={tab.key} onClick={() => {
                     setActiveStatus(tab.key)
+                    if (tab.key === 'COMPETITOR_SPY' && isPaid && !spyLoaded) loadSpyResults()
                     setSelected(
-                      tab.key === 'COMPETITOR_SPY'
-                        ? (isPaid ? spyOpps[0] ?? null : null)
+                      tab.key === 'COMPETITOR_SPY' ? null
                         : allOpps.filter(o => o.status === tab.key)[0] ?? null
                     )
                     setSearch('')
@@ -660,69 +762,119 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
             </div>
           </div>
 
-          {/* Spy tab paywall for free users */}
-          {activeStatus === 'COMPETITOR_SPY' && !isPaid && (
-            <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
-              {/* Blurred preview of leads */}
-              <div style={{ filter: 'blur(5px)', pointerEvents: 'none', padding: '8px 0', opacity: 0.6 }}>
-                {(spyOpps.length > 0 ? spyOpps : [{
-                  id: 'preview-1', redditPostTitle: 'We finally dropped Loom after 2 years — here\'s what happened',
-                  intentScore: 88, painType: 'switching_intent', competitorMentioned: 'Loom',
-                  subreddit: { name: 'SaaS' }, redditPostedAt: new Date().toISOString(),
-                }] as any[]).slice(0, 3).map((opp: any, i: number) => (
-                  <div key={i} style={{
-                    display: 'flex', flexDirection: 'column', gap: 6, padding: '14px 16px',
-                    borderBottom: `1px solid ${S.line}`,
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ padding: '3px 8px', borderRadius: 5, background: 'rgba(245,158,11,.15)', color: '#f59e0b', fontSize: 12, fontWeight: 600 }}>
-                        🎯 {opp.competitorMentioned ?? 'Competitor'}
-                      </span>
-                      <span style={{ padding: '3px 8px', borderRadius: 5, background: S.orangeSoft, color: S.orange2, fontSize: 12, fontWeight: 600 }}>
-                        {opp.intentScore}%
-                      </span>
-                    </div>
-                    <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: S.text, lineHeight: 1.4 }}>
-                      {opp.redditPostTitle}
-                    </p>
-                    <p style={{ margin: 0, fontSize: 13, color: S.text4 }}>r/{opp.subreddit?.name} · just now</p>
-                  </div>
-                ))}
-              </div>
-              {/* Upgrade overlay */}
+          {/* ── SPY TAB ─────────────────────────────────────────────────── */}
+          {activeStatus === 'COMPETITOR_SPY' && (
+            !isPaid ? (
+              /* Free user paywall */
               <div style={{
-                position: 'absolute', inset: 0,
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                background: 'rgba(16,12,8,.7)', backdropFilter: 'blur(2px)',
-                gap: 16, padding: 32, textAlign: 'center',
+                flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                justifyContent: 'center', gap: 16, padding: 32, textAlign: 'center',
               }}>
-                <div style={{ fontSize: 32 }}>🕵️</div>
+                <div style={{ fontSize: 40 }}>🕵️</div>
                 <div>
-                  <p style={{ margin: '0 0 6px', fontSize: 17, fontWeight: 700, color: S.text }}>
-                    Competitor Spy is a paid feature
-                  </p>
-                  <p style={{ margin: 0, fontSize: 14, color: S.text3, maxWidth: 280 }}>
-                    See every Reddit thread where people are venting about your competitors — and get there first.
+                  <p style={{ margin: '0 0 6px', fontSize: 17, fontWeight: 700, color: S.text }}>Competitor Spy is a paid feature</p>
+                  <p style={{ margin: 0, fontSize: 14, color: S.text3, maxWidth: 280, lineHeight: 1.6 }}>
+                    Search all of Reddit for threads mentioning your competitors — right now, across every subreddit.
                   </p>
                 </div>
-                {counts.spy > 0 && (
-                  <p style={{ margin: 0, fontSize: 13, color: '#f59e0b', fontWeight: 600 }}>
-                    {counts.spy} competitor thread{counts.spy !== 1 ? 's' : ''} found this week — upgrade to read them
-                  </p>
-                )}
                 <a href="/settings?tab=billing" style={{
                   display: 'inline-block', padding: '10px 24px', borderRadius: 8,
                   background: S.orange, color: '#fff', fontWeight: 700, fontSize: 15,
-                  textDecoration: 'none', transition: 'opacity .15s',
-                }}>
-                  Upgrade to Starter →
-                </a>
+                  textDecoration: 'none',
+                }}>Upgrade to Starter →</a>
               </div>
-            </div>
+            ) : (
+              /* Paid user spy view */
+              <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                {/* Spy scan button */}
+                <div style={{ padding: '10px 14px', borderBottom: `1px solid ${S.line}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <button
+                    onClick={handleSpyScan}
+                    disabled={spyScanning}
+                    style={{
+                      width: '100%', padding: '10px 14px', borderRadius: 9, cursor: spyScanning ? 'not-allowed' : 'pointer',
+                      fontFamily: 'inherit', fontSize: 14, fontWeight: 700,
+                      background: spyScanning ? S.card : 'rgba(245,158,11,.12)',
+                      color: spyScanning ? S.text3 : '#d97706',
+                      border: `1px solid ${spyScanning ? S.line : 'rgba(245,158,11,.3)'}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'all .15s',
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+                      className={spyScanning ? 'ib-spin' : undefined}>
+                      <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                    </svg>
+                    {spyScanning ? 'Scanning Reddit…' : 'Scan competitors now'}
+                  </button>
+                  {spyMsg && (
+                    <div style={{
+                      fontSize: 12, fontWeight: 600, padding: '4px 8px', borderRadius: 5,
+                      background: S.card, color: S.text3, fontFamily: 'JetBrains Mono, monospace',
+                    }}>{spyMsg}</div>
+                  )}
+                </div>
+
+                {/* Results list */}
+                <div className="ib-scroll" style={{ flex: 1, overflowY: 'auto' }}>
+                  {!spyLoaded ? (
+                    <div style={{ padding: '48px 24px', textAlign: 'center', color: S.text4, fontSize: 14 }}>Loading…</div>
+                  ) : spyResults.length === 0 ? (
+                    <div style={{ padding: '48px 24px', textAlign: 'center' }}>
+                      <p style={{ fontSize: 16, fontWeight: 600, color: S.text3, margin: '0 0 6px' }}>No results yet</p>
+                      <p style={{ fontSize: 14, color: S.text4, margin: 0 }}>Hit "Scan competitors now" to search Reddit for the last 72 hours.</p>
+                    </div>
+                  ) : spyResults.map(r => {
+                    const switching = isSwitching(r)
+                    const isActive = selectedSpy?.id === r.id
+                    return (
+                      <div
+                        key={r.id}
+                        className="ib-thread"
+                        onClick={() => setSelectedSpy(r)}
+                        style={{
+                          display: 'flex', flexDirection: 'column', gap: 7,
+                          padding: '13px 16px', borderBottom: `1px solid ${S.line}`,
+                          cursor: 'pointer', transition: 'background .15s',
+                          background: isActive ? S.card : 'transparent',
+                          borderLeft: `2px solid ${isActive ? '#f59e0b' : 'transparent'}`,
+                          paddingLeft: isActive ? 14 : 16,
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <span style={{
+                            fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 4,
+                            background: 'rgba(245,158,11,.12)', color: '#d97706',
+                            fontFamily: 'JetBrains Mono, monospace',
+                          }}>🎯 {r.competitor}</span>
+                          {switching && (
+                            <span style={{
+                              fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 4,
+                              background: S.redSoft, color: S.red,
+                              fontFamily: 'JetBrains Mono, monospace',
+                            }}>SWITCHING</span>
+                          )}
+                          <span style={{ marginLeft: 'auto', fontSize: 12, color: S.text4, fontFamily: 'JetBrains Mono, monospace' }}>
+                            {timeAgo(r.redditPostedAt)}
+                          </span>
+                        </div>
+                        <div style={{
+                          fontSize: 14, fontWeight: 600, color: S.text, lineHeight: 1.35,
+                          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                        } as React.CSSProperties}>{r.redditPostTitle}</div>
+                        <div style={{ fontSize: 12, color: S.text3, fontFamily: 'JetBrains Mono, monospace' }}>
+                          r/{r.subredditName} · u/{r.redditAuthor}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
           )}
 
-          {/* Thread list */}
-          <div className="ib-scroll" style={{ flex: 1, overflowY: 'auto', display: activeStatus === 'COMPETITOR_SPY' && !isPaid ? 'none' : undefined }}>
+          {/* ── NORMAL THREAD LIST ─────────────────────────────────────── */}
+          <div className="ib-scroll" style={{ flex: 1, overflowY: 'auto', display: activeStatus === 'COMPETITOR_SPY' ? 'none' : undefined }}>
             {filtered.length === 0 ? (
               <div style={{ padding: '48px 24px', textAlign: 'center' }}>
                 <div style={{ width: 44, height: 44, borderRadius: 11, background: S.card, border: `1px solid ${S.line2}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
@@ -797,8 +949,68 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
           </div>
         </div>
 
+        {/* ── SPY DETAIL PANEL ────────────────────────────────────────── */}
+        {activeStatus === 'COMPETITOR_SPY' && selectedSpy && isPaid && (
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden', background: S.bg }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 24px', borderBottom: `1px solid ${S.line}`, background: S.bg, flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: S.text3, fontSize: 15, flex: 1, minWidth: 0 }}>
+                <span>🕵️ Spy</span>
+                <span style={{ color: S.text4 }}>/</span>
+                <span style={{ color: S.text, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedSpy.redditPostTitle}</span>
+              </div>
+              <a href={selectedSpy.redditPostUrl} target="_blank" rel="noopener noreferrer"
+                style={{ fontSize: 13, fontWeight: 600, color: S.orange2, textDecoration: 'none', flexShrink: 0 }}>
+                Open on Reddit ↗
+              </a>
+            </div>
+            <div className="ib-scroll" style={{ flex: 1, overflowY: 'auto', padding: '28px 32px' }}>
+              {/* Competitor badge + switching tag */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 13, fontWeight: 700, padding: '4px 10px', borderRadius: 6, background: 'rgba(245,158,11,.12)', color: '#d97706' }}>
+                  🎯 {selectedSpy.competitor}
+                </span>
+                {isSwitching(selectedSpy) && (
+                  <span style={{ fontSize: 13, fontWeight: 700, padding: '4px 10px', borderRadius: 6, background: S.redSoft, color: S.red }}>
+                    SWITCHING INTENT — reply fast
+                  </span>
+                )}
+                <span style={{ fontSize: 13, color: S.text4, marginLeft: 'auto' }}>r/{selectedSpy.subredditName} · {timeAgo(selectedSpy.redditPostedAt)}</span>
+              </div>
+              {/* Title */}
+              <h2 style={{ margin: '0 0 16px', fontSize: 22, fontWeight: 700, color: S.text, lineHeight: 1.35 }}>
+                {selectedSpy.redditPostTitle}
+              </h2>
+              {/* Body */}
+              {selectedSpy.redditPostBody && (
+                <div style={{ background: S.card, border: `1px solid ${S.line}`, borderRadius: 10, padding: '16px 20px', marginBottom: 20, fontSize: 15, color: S.text2, lineHeight: 1.7 }}>
+                  {selectedSpy.redditPostBody}
+                </div>
+              )}
+              {/* Stats */}
+              <div style={{ display: 'flex', gap: 16, fontSize: 13, color: S.text4, fontFamily: 'JetBrains Mono, monospace' }}>
+                <span>▲ {selectedSpy.redditScore}</span>
+                <span>💬 {selectedSpy.redditCommentCount} comments</span>
+                <span>u/{selectedSpy.redditAuthor}</span>
+              </div>
+              {/* Dismiss */}
+              <div style={{ marginTop: 24 }}>
+                <button
+                  onClick={async () => {
+                    await fetch('/api/spy/results', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: selectedSpy.id, status: 'DISMISSED' }) })
+                    setSpyResults(prev => prev.filter(r => r.id !== selectedSpy.id))
+                    setSelectedSpy(spyResults.find(r => r.id !== selectedSpy.id) ?? null)
+                  }}
+                  style={{ padding: '8px 16px', borderRadius: 7, fontSize: 13, fontWeight: 600, background: S.card, border: `1px solid ${S.line}`, color: S.text3, cursor: 'pointer', fontFamily: 'inherit' }}
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ── DETAIL PANEL ─────────────────────────────────────────────── */}
-        {selected ? (
+        {activeStatus !== 'COMPETITOR_SPY' && selected ? (
           <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden', background: S.bg }}>
 
             {/* Detail topbar */}

@@ -46,6 +46,7 @@ model User {
   warmupSession   WarmupSession?
   accountHealth   AccountHealth?
   supportTickets  SupportTicket[]
+  spyResults      SpyResult[]
 
   @@map("users")
 }
@@ -78,6 +79,7 @@ model Product {
   subreddits  Subreddit[]
   opportunities Opportunity[]
   geoReports  GeoReport[]
+  spyResults  SpyResult[]
 
   @@map("products")
 }
@@ -328,6 +330,39 @@ model GeoReport {
   product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@map("geo_reports")
+}
+
+// ─── Competitor Spy ───────────────────────────────────────────────────────────
+
+model SpyResult {
+  id          String   @id @default(cuid())
+  userId      String
+  productId   String
+  createdAt   DateTime @default(now())
+
+  competitor       String    // which competitor was searched
+  redditPostId     String
+  redditPostUrl    String
+  redditPostTitle  String
+  redditPostBody   String?   @db.Text
+  redditAuthor     String
+  redditScore      Int       @default(0)
+  redditCommentCount Int     @default(0)
+  redditPostedAt   DateTime
+  subredditName    String
+
+  status      SpyStatus @default(NEW)
+
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product     Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, redditPostId])
+  @@map("spy_results")
+}
+
+enum SpyStatus {
+  NEW
+  DISMISSED
 }
 
 // ─── Support Tickets ──────────────────────────────────────────────────────────
