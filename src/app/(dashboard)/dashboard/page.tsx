@@ -21,7 +21,7 @@ async function getDashboardData(userId: string, productId?: string) {
     prisma.opportunity.count({ where: { ...oppWhere, status: 'QUEUED' } }),
     prisma.postedReply.count({ where: { opportunity: { ...oppWhere } } }),
     prisma.opportunity.count({ where: { ...oppWhere, createdAt: { gte: weekAgo } } }),
-    prisma.product.findMany({ where: { userId, isActive: true }, select: { id: true, name: true }, orderBy: { createdAt: 'asc' } }),
+    prisma.product.findMany({ where: productId ? { id: productId, userId, isActive: true } : { userId, isActive: true }, select: { id: true, name: true }, orderBy: { createdAt: 'asc' } }),
     prisma.opportunity.findMany({
       where: { ...oppWhere, status: 'QUEUED' },
       orderBy: { intentScore: 'desc' },
