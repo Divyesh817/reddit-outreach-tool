@@ -682,29 +682,6 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
               </div>
             )}
 
-            {/* Product filter dropdown — only when multiple products */}
-            {products.length > 1 && (
-              <select
-                value={filterProductId}
-                onChange={e => {
-                  setFilterProductId(e.target.value)
-                  setSelected(null)
-                  setSearch('')
-                }}
-                style={{
-                  width: '100%', padding: '9px 12px', borderRadius: 8, fontSize: 14,
-                  fontWeight: 500, background: S.card, border: `1px solid ${S.line}`,
-                  color: S.text, cursor: 'pointer', fontFamily: 'inherit', outline: 'none',
-                }}
-              >
-                <option value="all">All leads ({allOpps.filter(o => o.status === activeStatus).length})</option>
-                {products.map(p => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({allOpps.filter(o => o.product.id === p.id && o.status === activeStatus).length})
-                  </option>
-                ))}
-              </select>
-            )}
 
             {/* Status tabs */}
             <div style={{ display: 'flex', background: S.card, border: `1px solid ${S.line}`, borderRadius: 8, padding: 3, gap: 2, width: '100%' }}>
