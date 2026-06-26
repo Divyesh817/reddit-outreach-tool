@@ -165,7 +165,6 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
   // 'all' or a specific product id
   const [filterProductId, setFilterProductId] = useState<string>('all')
   // 'all' or a specific product id for scanning
-  const [scanProductId, setScanProductId] = useState<string>('all')
   const [scanning, setScanning] = useState(false)
   const [scanMsg, setScanMsg] = useState('')
   const [leadsToast, setLeadsToast] = useState<{ count: number; away?: boolean } | null>(null)
@@ -413,9 +412,7 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
         return
       }
 
-      let subreddits: { subredditId: string; subredditName: string; productId: string }[] = prep.subreddits ?? []
-      // Filter to selected product if not "all"
-      if (scanProductId !== 'all') subreddits = subreddits.filter(s => s.productId === scanProductId)
+      const subreddits: { subredditId: string; subredditName: string; productId: string }[] = prep.subreddits ?? []
       if (!subreddits.length) {
         setScanMsg('No subreddits configured — add some in Products')
         setTimeout(() => setScanMsg(''), 6000)
@@ -648,25 +645,6 @@ export function InboxView({ opportunities: initial, initialStatus, productName, 
                 </svg>
                 {scanning ? 'Scanning…' : 'Scan for leads'}
               </button>
-              {/* Product selector for scan — only when multiple products */}
-              {products.length > 1 && (
-                <select
-                  value={scanProductId}
-                  onChange={e => setScanProductId(e.target.value)}
-                  disabled={scanning}
-                  style={{
-                    padding: '0 10px', borderRadius: 10, fontSize: 13, fontWeight: 500,
-                    background: S.card, border: `1px solid ${S.line}`, color: S.text,
-                    cursor: 'pointer', fontFamily: 'inherit', outline: 'none',
-                    flexShrink: 0, maxWidth: 110,
-                  }}
-                >
-                  <option value="all">All</option>
-                  {products.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-              )}
             </div>
 
             {/* Scan result pill */}
